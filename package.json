@@ -1,0 +1,13 @@
+{
+  "name": "configdiff",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm --workspace apps/web run dev",
+    "build": "npm --workspace apps/web run build",
+    "test": "npm --workspace packages/engine run test"
+  }
+}

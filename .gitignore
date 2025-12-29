@@ -1,0 +1,12 @@
+﻿node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+**/out/
+dist/
+**/dist/
+.vercel/
+**/.vercel/
+.env
+.env.*

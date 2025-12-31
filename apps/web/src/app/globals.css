@@ -50,3 +50,8 @@ a {
 html[data-theme="dark"] {
   color-scheme: dark;
 }
+
+/* ✅ NEW: ensure light-mode selects/menus don’t render as dark when OS is dark */
+html[data-theme="light"] {
+  color-scheme: light;
+}

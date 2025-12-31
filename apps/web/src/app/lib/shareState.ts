@@ -1,7 +1,8 @@
 "use client";
 
 export type EnvProfileId = "dotenv" | "compose";
-export type FormatId = "env" | "json";
+export type FormatId = "env" | "json" | "yaml";
+
 
 export type ShareStateV1 = {
   v: 1;
@@ -69,7 +70,8 @@ export function decodeShareState(encoded: string): ShareStateV1 | null {
     // Backward-compatible defaults for any missing fields
     const ui: any = parsed.ui;
 
-    if (ui.format !== "env" && ui.format !== "json") ui.format = "env";
+	if (ui.format !== "env" && ui.format !== "json" && ui.format !== "yaml") ui.format = "env";
+
     if (ui.envProfile !== "dotenv" && ui.envProfile !== "compose") ui.envProfile = "dotenv";
     if (typeof ui.showMore !== "boolean") ui.showMore = false;
 

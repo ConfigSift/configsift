@@ -1,12 +1,19 @@
 ﻿"use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { computeDiffParts, isSensitiveKey, normSeverity, sevRank } from "./lib/configdiff";
+import { normSeverity } from "./lib/configdiff";
 import { useConfigDiffCompare } from "./lib/useConfigDiffCompare";
 import { useConfigValidate } from "./lib/useConfigValidate";
 import { decodeShareState, encodeShareState, ShareStateV1, EnvProfileId, FormatId } from "./lib/shareState";
 
-import { ActionButton, Toggle, Pill, Badge, SevChip, Section, Row, RowNode } from "./_components/configdiff-ui";
+import { ActionButton } from "./_components/configdiff-ui";
+import { ConfigEditors } from "./_components/ConfigEditors";
+import { ValidatePanel } from "./_components/ValidatePanel";
+import { ComparePanel } from "./_components/ComparePanel";
+
+import { useThemeMode } from "./lib/useThemeMode";
+import { useEditorIO } from "./lib/useEditorIO";
+import { useCompareDerived } from "./lib/useCompareDerived";
 
 type Side = "left" | "right";
 type SortMode = "key_asc" | "key_desc" | "severity_desc" | "none";
@@ -14,53 +21,18 @@ type SortMode = "key_asc" | "key_desc" | "severity_desc" | "none";
 // Tool tabs (workspace nav)
 type ToolId = "compare" | "format" | "minify" | "validate" | "bundle";
 
-type Finding = { key: string; severity?: string; message: string };
-type FindingCountsUI = { critical: number; suggestions: number };
-type FindingCountsAll = { critical: number; suggestions: number; total: number };
+// ✅ jump-to-line payload (state lives INSIDE Home)
+type JumpTo = { side: Side; line: number } | null;
 
-// THEME
-type ThemeMode = "light" | "dark" | "system";
-type ResolvedTheme = "light" | "dark";
+type LineAnnotation = {
+  lineStart: number;
+  lineEnd: number;
+  severity: "high" | "medium" | "low" | "info";
+  label: string;
+};
 
 const LS_KEY = "configsift:draft:v1";
-const LS_THEME_KEY = "configsift:theme:v1";
 const MAX_SHARE_URL_LEN = 1900;
-
-const LIGHT_THEME = {
-  bgTop: "#F6F8FF",
-  bgMid: "#F0F4FF",
-  bgBottom: "#F8F9FB",
-  card: "#FFFFFF",
-  card2: "rgba(255,255,255,0.86)",
-  border: "rgba(53,56,83,0.14)",
-  borderSoft: "rgba(53,56,83,0.10)",
-  text: "#121528",
-  muted: "#5B5F77",
-  blue: "#4A7FEB",
-  blue2: "#5693D8",
-  blueSoft: "rgba(74,127,235,0.14)",
-  blueSoft2: "rgba(86,147,216,0.12)",
-  shadow: "0 12px 34px rgba(16, 21, 40, 0.08)",
-  shadowSm: "0 6px 18px rgba(16, 21, 40, 0.06)",
-};
-
-const DARK_THEME = {
-  bgTop: "#0B0F14",
-  bgMid: "#0C121B",
-  bgBottom: "#0A0E13",
-  card: "rgba(255,255,255,0.05)",
-  card2: "rgba(255,255,255,0.03)",
-  border: "rgba(231,236,255,0.14)",
-  borderSoft: "rgba(231,236,255,0.10)",
-  text: "#E8EEF9",
-  muted: "rgba(232,238,249,0.70)",
-  blue: "#4DA3FF",
-  blue2: "#66B6FF",
-  blueSoft: "rgba(77,163,255,0.18)",
-  blueSoft2: "rgba(102,182,255,0.14)",
-  shadow: "0 18px 52px rgba(0,0,0,0.55)",
-  shadowSm: "0 10px 28px rgba(0,0,0,0.42)",
-};
 
 const SAMPLE_LEFT_ENV = `# Example prod
 DATABASE_URL=postgres://prod
@@ -88,6 +60,19 @@ const SAMPLE_RIGHT_JSON = `{
   "newFlag": 1
 }`;
 
+const SAMPLE_LEFT_YAML = `db:
+  host: prod
+  port: 5432
+debug: false
+`;
+
+const SAMPLE_RIGHT_YAML = `db:
+  host: staging
+  port: 5432
+debug: true
+newFlag: 1
+`;
+
 function timeAgo(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
   if (s < 5) return "just now";
@@ -100,13 +85,219 @@ function timeAgo(ms: number) {
   return `${d}d ago`;
 }
 
+/** Try hard to extract `line X` or `line X-Y` from any issue object/message. */
+function extractLineRange(issue: any): { lineStart?: number; lineEnd?: number } {
+  if (!issue) return {};
+
+  // 1) direct structured fields
+  const direct =
+    typeof issue.line === "number"
+      ? { lineStart: issue.line, lineEnd: issue.line }
+      : typeof issue?.loc?.line === "number"
+      ? { lineStart: issue.loc.line, lineEnd: issue.loc.line }
+      : typeof issue?.location?.line === "number"
+      ? { lineStart: issue.location.line, lineEnd: issue.location.line }
+      : typeof issue?.__lineStart === "number"
+      ? { lineStart: issue.__lineStart, lineEnd: issue.__lineEnd ?? issue.__lineStart }
+      : null;
+
+  if (direct) return direct;
+
+  // 2) try key/id/name/path fields (dotenv warnings often encode line here)
+  const keyish = String(issue.key ?? issue.path ?? issue.name ?? issue.id ?? "");
+  // matches "line 3-7", "line: 4", "Left:line:12"
+  const mKeyRange = keyish.match(/line[:\s]+(\d+)\s*[-–]\s*(\d+)/i);
+  if (mKeyRange) {
+    const a = Number(mKeyRange[1]);
+    const b = Number(mKeyRange[2]);
+    if (Number.isFinite(a) && Number.isFinite(b)) return { lineStart: a, lineEnd: b };
+  }
+  const mKeyLine = keyish.match(/line[:\s]+(\d+)/i);
+  if (mKeyLine) {
+    const a = Number(mKeyLine[1]);
+    if (Number.isFinite(a)) return { lineStart: a, lineEnd: a };
+  }
+  const mKeyL = keyish.match(/\b[LR]?(\d+)\b/); // last-resort if key is just "L3" or "R4" or "3"
+  if (mKeyL && /^[LR]?\d+$/.test(keyish.trim())) {
+    const a = Number(mKeyL[1]);
+    if (Number.isFinite(a)) return { lineStart: a, lineEnd: a };
+  }
+
+  // 3) message/error/details text
+  const msg = String(issue.message ?? issue.error ?? issue.details ?? issue.msg ?? issue.text ?? "");
+
+  // support ".env" style "line at 1" / "line at 3-7"
+  const mAtRange = msg.match(/\bline\s+at\s+(\d+)\s*[-–]\s*(\d+)\b/i);
+  if (mAtRange) {
+    const a = Number(mAtRange[1]);
+    const b = Number(mAtRange[2]);
+    if (Number.isFinite(a) && Number.isFinite(b)) return { lineStart: a, lineEnd: b };
+  }
+
+  // Allow both "line 3-7" and "line at 3-7"
+  const mRange = msg.match(/line\s+(?:at\s+)?(\d+)\s*[-–]\s*(\d+)/i);
+  if (mRange) {
+    const a = Number(mRange[1]);
+    const b = Number(mRange[2]);
+    if (Number.isFinite(a) && Number.isFinite(b)) return { lineStart: a, lineEnd: b };
+  }
+
+  // Allow both "line 3" and "line at 3"
+  const m1 = msg.match(/line\s+(?:at\s+)?(\d+)/i);
+  if (m1) {
+    const a = Number(m1[1]);
+    if (Number.isFinite(a)) return { lineStart: a, lineEnd: a };
+  }
+
+  const mLRange = msg.match(/\bL(\d+)\s*[-–]\s*(\d+)\b/i);
+  if (mLRange) {
+    const a = Number(mLRange[1]);
+    const b = Number(mLRange[2]);
+    if (Number.isFinite(a) && Number.isFinite(b)) return { lineStart: a, lineEnd: b };
+  }
+  const mL = msg.match(/\bL(\d+)\b/i);
+  if (mL) {
+    const a = Number(mL[1]);
+    if (Number.isFinite(a)) return { lineStart: a, lineEnd: a };
+  }
+
+  return {};
+}
+
+/** Escape string for safe RegExp construction */
+function reEscape(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** For dot-path keys, use leaf segment for YAML/JSON key matching. */
+function leafOfKey(k: string) {
+  const s = String(k ?? "");
+  if (!s) return "";
+  const noIndexes = s.replace(/\[\d+\]/g, "");
+  const parts = noIndexes.split(".");
+  return parts[parts.length - 1] ?? noIndexes;
+}
+
+/**
+ * Best-effort "find line number for key" from raw text.
+ * Used when engine messages don’t include a `line X`.
+ */
+function findLineForKey(opts: { key: string; text: string; format: FormatId; envProfile?: EnvProfileId }): number | null {
+  const key = String(opts.key ?? "");
+  const text = String(opts.text ?? "");
+  if (!key || !text) return null;
+
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+
+  if (opts.format === "env") {
+    // Allow optional "export " in dotenv mode
+    const k = reEscape(key);
+    const allowExport = opts.envProfile !== "compose";
+    const re = allowExport
+      ? new RegExp(`^\\s*(?!#)\\s*(?:export\\s+)?${k}\\s*=`, "i")
+      : new RegExp(`^\\s*(?!#)\\s*${k}\\s*=`, "i");
+
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i] ?? "")) return i + 1;
+    }
+    return null;
+  }
+
+  if (opts.format === "yaml") {
+    const leaf = leafOfKey(key);
+    if (!leaf) return null;
+    const k = reEscape(leaf);
+    const re = new RegExp(`^\\s*(?!#)\\s*${k}\\s*:`, "i");
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i] ?? "")) return i + 1;
+    }
+    return null;
+  }
+
+  // json
+  const leaf = leafOfKey(key);
+  if (!leaf) return null;
+  const k = reEscape(leaf);
+  const re = new RegExp(`"\\s*${k}\\s*"\\s*:`, "i");
+  for (let i = 0; i < lines.length; i++) {
+    if (re.test(lines[i] ?? "")) return i + 1;
+  }
+  return null;
+}
+
+/**
+ * Resolve issue line range:
+ * 1) direct/parsed line info (line/Lxx)
+ * 2) fallback: match by key against the input text
+ */
+function resolveIssueLineRange(opts: {
+  issue: any;
+  sideText: string;
+  format: FormatId;
+  envProfile: EnvProfileId;
+}): { lineStart?: number; lineEnd?: number } {
+  const { issue, sideText, format, envProfile } = opts;
+
+  const direct = extractLineRange(issue);
+  if (direct.lineStart) return direct;
+
+  const key = String(issue?.key ?? issue?.path ?? issue?.name ?? "");
+  if (!key) return {};
+
+  const line = findLineForKey({ key, text: sideText, format, envProfile });
+  if (!line) return {};
+  return { lineStart: line, lineEnd: line };
+}
+
+/** Resolve compare finding line(s) on each side. */
+function resolveFindingLines(opts: {
+  finding: any;
+  leftText: string;
+  rightText: string;
+  format: FormatId;
+  envProfile: EnvProfileId;
+}): { leftLine?: number; rightLine?: number } {
+  const { finding, leftText, rightText, format, envProfile } = opts;
+
+  const msg = String(finding?.message ?? "");
+  const mentionsLeft = /\bleft\b/i.test(msg);
+  const mentionsRight = /\bright\b/i.test(msg);
+
+  // Try explicit line info in message/object
+  const lr = extractLineRange(finding);
+  if (lr.lineStart) {
+    const line = lr.lineStart;
+    if (mentionsLeft && !mentionsRight) return { leftLine: line };
+    if (mentionsRight && !mentionsLeft) return { rightLine: line };
+    // ambiguous → fall through to key matching, then decide
+  }
+
+  const key = String(finding?.key ?? "");
+  const leftLine = key ? findLineForKey({ key, text: leftText, format, envProfile }) : null;
+  const rightLine = key ? findLineForKey({ key, text: rightText, format, envProfile }) : null;
+
+  // If message clearly indicates a side, prefer that side only (even if key exists on both)
+  if (mentionsLeft && !mentionsRight) return { leftLine: leftLine ?? undefined };
+  if (mentionsRight && !mentionsLeft) return { rightLine: rightLine ?? undefined };
+
+  // If explicit line existed but we couldn't infer side, prefer side where key match exists; else both
+  if (lr.lineStart) {
+    const line = lr.lineStart;
+    if (leftLine && !rightLine) return { leftLine: line };
+    if (rightLine && !leftLine) return { rightLine: line };
+    return { leftLine: line, rightLine: line };
+  }
+
+  return { leftLine: leftLine ?? undefined, rightLine: rightLine ?? undefined };
+}
+
 export default function Home() {
   const [leftDraft, setLeftDraft] = useState("");
   const [rightDraft, setRightDraft] = useState("");
   const [left, setLeft] = useState("");
   const [right, setRight] = useState("");
 
-  // format (env/json)
+  // format (env/json/yaml)
   const [format, setFormat] = useState<FormatId>("env");
 
   // env profile (env only)
@@ -118,15 +309,21 @@ export default function Home() {
   // workspace tabs
   const [tool, setTool] = useState<ToolId>("compare");
 
-  // theme
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+  // ✅ Jump-to-line wiring (hooks MUST be inside Home)
+  const [jumpTo, setJumpTo] = useState<JumpTo>(null);
+
+  // theme (moved to hook)
+  const { themeMode, setThemeMode, THEME, segValue } = useThemeMode();
 
   const leftInputRef = useRef<HTMLInputElement | null>(null);
   const rightInputRef = useRef<HTMLInputElement | null>(null);
   const shareImportRef = useRef<HTMLInputElement | null>(null);
 
-  const [dragOver, setDragOver] = useState<{ left: boolean; right: boolean }>({ left: false, right: false });
+  // editor IO (moved to hook)
+  const { pasteErr, dragOver, pasteFromClipboard, readFile, onPickFile, onDrop, onDragOver, onDragLeave } = useEditorIO({
+    setLeftDraft,
+    setRightDraft,
+  });
 
   const draftBlank = leftDraft.trim().length === 0 && rightDraft.trim().length === 0;
   const draftReady = leftDraft.trim().length > 0 && rightDraft.trim().length > 0;
@@ -139,6 +336,9 @@ export default function Home() {
   const [vSevHigh, setVSevHigh] = useState(true);
   const [vSevMed, setVSevMed] = useState(true);
   const [vSevLow, setVSevLow] = useState(true);
+
+  // ✅ Strict YAML mode (Validate only)
+  const [yamlStrict, setYamlStrict] = useState(false);
 
   const validateSeverityEnabled = (sev: any) => {
     const s = normSeverity(sev);
@@ -155,22 +355,15 @@ export default function Home() {
   });
 
   // -----------------------
-  // ✅ Validate UX controls
+  // ✅ Validate UX controls (NO live validation)
   // -----------------------
-  const [validateLive, setValidateLive] = useState(false); // default OFF (feels intentional with Run + auto-run on open)
-
   const [lastEditedAt, setLastEditedAt] = useState<number | null>(null);
   useEffect(() => {
-    // edits in either textarea (or changing format/profile) should mark validation as potentially stale
     setLastEditedAt(Date.now());
-  }, [leftDraft, rightDraft, format, envProfile]);
-
-  // validate only auto-runs while on Validate tab and Live is ON
-  const validateAutoEnabled = tool === "validate" && validateLive;
+  }, [leftDraft, rightDraft, format, envProfile, yamlStrict]);
 
   const {
     result: validateResult,
-    engineMs: validateMs,
     status: validateStatus,
     run: runValidate,
     hasRun: validateHasRun,
@@ -179,7 +372,8 @@ export default function Home() {
     debounceMs: 250,
     profile: envProfile,
     format,
-    enabled: validateAutoEnabled,
+    enabled: false, // ✅ disable auto validation entirely
+    yamlStrict,
   });
 
   // ✅ Auto-run once when the user opens the Validate tab
@@ -191,58 +385,7 @@ export default function Home() {
   }, [tool]); // run on tab-open only
 
   const validateIsStale =
-    !validateLive &&
-    validateHasRun &&
-    lastValidatedAt != null &&
-    lastEditedAt != null &&
-    lastEditedAt > lastValidatedAt;
-
-  // THEME: load + apply + persist
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(LS_THEME_KEY);
-      if (saved === "light" || saved === "dark" || saved === "system") setThemeMode(saved);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_THEME_KEY, themeMode);
-    } catch {}
-
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-    const isDark = themeMode === "dark" || (themeMode === "system" && prefersDark);
-    const next: ResolvedTheme = isDark ? "dark" : "light";
-
-    setResolvedTheme(next);
-
-    if (typeof document !== "undefined") document.documentElement.dataset.theme = next;
-  }, [themeMode]);
-
-  useEffect(() => {
-    if (themeMode !== "system") return;
-
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => {
-      const next: ResolvedTheme = mq.matches ? "dark" : "light";
-      setResolvedTheme(next);
-      document.documentElement.dataset.theme = next;
-    };
-
-    if (mq.addEventListener) mq.addEventListener("change", handler);
-    else mq.addListener(handler);
-
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", handler);
-      else mq.removeListener(handler);
-    };
-  }, [themeMode]);
-
-  const THEME = resolvedTheme === "dark" ? DARK_THEME : LIGHT_THEME;
+    validateHasRun && lastValidatedAt != null && lastEditedAt != null && lastEditedAt > lastValidatedAt;
 
   const [query, setQuery] = useState("");
   const [showChanged, setShowChanged] = useState(true);
@@ -259,297 +402,38 @@ export default function Home() {
 
   const [rowLimit, setRowLimit] = useState<number>(500);
   const [sortMode, setSortMode] = useState<SortMode>("none");
-  const [pasteErr, setPasteErr] = useState<string | null>(null);
 
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
 
-  const q = query.trim().toLowerCase();
-
-  const matchesQ = (key: string, preview?: string) => {
-    if (!q) return true;
-    const k = key.toLowerCase();
-    const p = (preview ?? "").toLowerCase();
-    return k.includes(q) || p.includes(q);
-  };
-
-  const severityEnabled = (sev?: string) => {
-    const s = normSeverity(sev);
-    if (s === "high") return sevHigh;
-    if (s === "medium") return sevMed;
-    if (s === "low") return sevLow;
-    return true;
-  };
-
-  const getChangedStrings = (c: any) => {
-    if (maskValues) {
-      const from = (result as any)?.redactedValues?.[c.key]?.from?.redacted ?? (c.from != null ? "••••" : "");
-      const to = (result as any)?.redactedValues?.[c.key]?.to?.redacted ?? (c.to != null ? "••••" : "");
-      return { from: String(from ?? ""), to: String(to ?? "") };
-    }
-    return { from: String(c.from ?? ""), to: String(c.to ?? "") };
-  };
-
-  const displayChanged = (c: any) => {
-    const { from, to } = getChangedStrings(c);
-    return `${from}  →  ${to}`;
-  };
-
-  const displaySingle = (key: string, rawValue: any) => {
-    if (maskValues) return (result as any)?.redactedValues?.[key]?.value?.redacted ?? "••••";
-    return String(rawValue ?? "");
-  };
-
-  const renderChangedValue = (c: any) => {
-    const { from, to } = getChangedStrings(c);
-    const parts = computeDiffParts(from, to);
-
-    const isEffectivelySame = parts.fromMid === "" && parts.toMid === "" && parts.suffix === "";
-
-    const faint = { opacity: 0.86 };
-    const hi = {
-      fontWeight: 750,
-      background: THEME.blueSoft,
-      border: `1px solid ${THEME.borderSoft}`,
-      borderRadius: 8,
-      padding: "1px 6px",
-    } as React.CSSProperties;
-
-    if (isEffectivelySame) {
-      return (
-        <span className="mono" style={{ opacity: 0.92 }}>
-          {from} <span style={{ opacity: 0.7 }}>→</span> {to}
-        </span>
-      );
-    }
-
-    return (
-      <span className="mono" style={{ opacity: 0.96 }}>
-        <span style={faint}>{parts.prefix}</span>
-        {parts.fromMid ? <span style={hi}>{parts.fromMid}</span> : null}
-        <span style={faint}>{parts.suffix}</span>
-
-        <span style={{ opacity: 0.7, padding: "0 10px" }}>→</span>
-
-        <span style={faint}>{parts.prefix}</span>
-        {parts.toMid ? <span style={hi}>{parts.toMid}</span> : null}
-        <span style={faint}>{parts.suffix}</span>
-      </span>
-    );
-  };
-
-  const filtersHint = useMemo(() => {
-    const bits: string[] = [];
-    bits.push(`Format: ${format}`);
-    if (format === "env") bits.push(`Parsing: ${envProfile}`);
-    if (secretsOnly) bits.push("Secrets-only is ON (only sensitive keys are shown).");
-    if (q) bits.push(`Search is active (“${query.trim()}”).`);
-    if (!sevHigh || !sevMed || !sevLow) bits.push("Severity filter is restricting Findings.");
-    if (rowLimit > 0) bits.push(`Row limit is ${rowLimit} (after filters).`);
-    if (rowLimit <= 0) bits.push("Row limit is unlimited (may freeze on huge diffs).");
-    if (!hasCompared) bits.push("Run Compare to see results.");
-    return bits.join(" ");
-  }, [format, envProfile, secretsOnly, q, query, sevHigh, sevMed, sevLow, rowLimit, hasCompared]);
-
-  const pasteFromClipboard = async (side: Side) => {
-    setPasteErr(null);
-    try {
-      if (!navigator.clipboard?.readText) {
-        setPasteErr("Clipboard API not available (requires HTTPS or localhost).");
-        return;
-      }
-      const text = await navigator.clipboard.readText();
-      if (!text) {
-        setPasteErr("Clipboard is empty.");
-        return;
-      }
-      if (side === "left") setLeftDraft(text);
-      else setRightDraft(text);
-    } catch (e: any) {
-      setPasteErr(e?.message ?? "Paste failed (clipboard permission).");
-    }
-  };
-
-  const readFile = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.readAsText(file);
-    });
-  };
-
-  const onPickFile = async (side: Side, file?: File | null) => {
-    if (!file) return;
-    const text = await readFile(file);
-    if (side === "left") setLeftDraft(text);
-    else setRightDraft(text);
-  };
-
-  const onDrop = async (side: Side, e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver((d) => ({ ...d, [side]: false }));
-
-    const file = e.dataTransfer.files?.[0];
-    await onPickFile(side, file);
-  };
-
-  const onDragOver = (side: Side, e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!dragOver[side]) setDragOver((d) => ({ ...d, [side]: true }));
-  };
-
-  const onDragLeave = (side: Side, e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver((d) => ({ ...d, [side]: false }));
-  };
-
-  const copyText = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const copyKeys = async (keys: string[]) => {
-    const ok = await copyText(keys.join("\n"));
-    if (!ok) alert("Copy failed (clipboard permissions).");
-  };
-
-  const sortList = <T extends { key: string }>(arr: T[]): T[] => {
-    if (sortMode === "none") return arr;
-    const copy = [...arr];
-    copy.sort((a, b) => {
-      if (sortMode === "key_asc") return a.key.localeCompare(b.key);
-      if (sortMode === "key_desc") return b.key.localeCompare(a.key);
-      if (sortMode === "severity_desc") return a.key.localeCompare(b.key);
-      return 0;
-    });
-    return copy;
-  };
-
-  const sortFindings = <T extends { key: string; severity?: string }>(arr: T[]): T[] => {
-    if (sortMode === "none") return arr;
-
-    const copy = [...arr];
-    copy.sort((a, b) => {
-      if (sortMode === "severity_desc") {
-        const d = sevRank(b.severity) - sevRank(a.severity);
-        if (d !== 0) return d;
-        return a.key.localeCompare(b.key);
-      }
-      if (sortMode === "key_asc") return a.key.localeCompare(b.key);
-      if (sortMode === "key_desc") return b.key.localeCompare(a.key);
-      return 0;
-    });
-    return copy;
-  };
-
-  const { filteredAll, rendered, uiMs, findingCountsUI, findingCountsAll } = useMemo(() => {
-    const t0 = performance.now();
-
-    const empty = {
-      changedFiltered: [] as any[],
-      addedFiltered: [] as any[],
-      removedFiltered: [] as any[],
-      findingsFiltered: [] as any[],
-    };
-
-    const emptyCountsUI: FindingCountsUI = { critical: 0, suggestions: 0 };
-    const emptyCountsAll: FindingCountsAll = { critical: 0, suggestions: 0, total: 0 };
-
-    if (compareBlank) {
-      const t1 = performance.now();
-      return {
-        filteredAll: empty,
-        rendered: empty,
-        uiMs: +(t1 - t0).toFixed(1),
-        findingCountsUI: emptyCountsUI,
-        findingCountsAll: emptyCountsAll,
-      };
-    }
-
-    if ("error" in result) {
-      const t1 = performance.now();
-      return {
-        filteredAll: empty,
-        rendered: empty,
-        uiMs: +(t1 - t0).toFixed(1),
-        findingCountsUI: emptyCountsUI,
-        findingCountsAll: emptyCountsAll,
-      };
-    }
-
-    const baseFindings: Finding[] = Array.isArray((result as any).findings) ? (result as any).findings : [];
-    const findingsAllArr: Finding[] = [...baseFindings];
-
-    const crit = findingsAllArr.filter((f) => normSeverity(f?.severity) === "high").length;
-    const tot = findingsAllArr.length;
-    const countsAll: FindingCountsAll = { critical: crit, suggestions: tot - crit, total: tot };
-
-    const changedFilteredRaw = (Array.isArray((result as any).changed) ? (result as any).changed : [])
-      .filter((c: any) => (secretsOnly ? isSensitiveKey(c.key) : true))
-      .filter((c: any) => {
-        const preview = maskValues ? displayChanged(c) : `${c.from ?? ""} ${c.to ?? ""}`;
-        return matchesQ(c.key, preview);
-      });
-
-    const addedFilteredRaw = (Array.isArray((result as any).added) ? (result as any).added : [])
-      .filter((a: any) => (secretsOnly ? isSensitiveKey(a.key) : true))
-      .filter((a: any) => {
-        const preview = maskValues ? displaySingle(a.key, a.value) : String(a.value ?? "");
-        return matchesQ(a.key, preview);
-      });
-
-    const removedFilteredRaw = (Array.isArray((result as any).removed) ? (result as any).removed : [])
-      .filter((r: any) => (secretsOnly ? isSensitiveKey(r.key) : true))
-      .filter((r: any) => {
-        const preview = maskValues ? displaySingle(r.key, r.value) : String(r.value ?? "");
-        return matchesQ(r.key, preview);
-      });
-
-    const findingsFilteredRaw = findingsAllArr
-      .filter((f: any) => (secretsOnly ? isSensitiveKey(f.key) : true))
-      .filter((f: any) => matchesQ(f.key, f.message) && severityEnabled(f.severity));
-
-    const changedFiltered = sortList(changedFilteredRaw);
-    const addedFiltered = sortList(addedFilteredRaw);
-    const removedFiltered = sortList(removedFilteredRaw);
-    const findingsFiltered = sortFindings(findingsFilteredRaw);
-
-    const filteredAll = { changedFiltered, addedFiltered, removedFiltered, findingsFiltered };
-
-    const criticalFiltered = findingsFiltered.filter((f: any) => normSeverity(f.severity) === "high").length;
-    const suggestionsFiltered = findingsFiltered.length - criticalFiltered;
-    const findingCountsUI: FindingCountsUI = { critical: criticalFiltered, suggestions: suggestionsFiltered };
-
-    const limitRaw = Number.isFinite(rowLimit) ? rowLimit : 500;
-    const limit = Math.max(0, Math.min(limitRaw, 50_000));
-    const applyLimit = <T,>(arr: T[]) => (limit <= 0 ? arr : arr.slice(0, limit));
-
-    const rendered = {
-      changedFiltered: applyLimit(changedFiltered),
-      addedFiltered: applyLimit(addedFiltered),
-      removedFiltered: applyLimit(removedFiltered),
-      findingsFiltered: applyLimit(findingsFiltered),
-    };
-
-    const t1 = performance.now();
-    return { filteredAll, rendered, uiMs: +(t1 - t0).toFixed(1), findingCountsUI, findingCountsAll: countsAll };
-  }, [compareBlank, result, q, sevHigh, sevMed, sevLow, secretsOnly, maskValues, rowLimit, sortMode]);
-
-  const isTruncated = (shown: number, total: number) => (rowLimit <= 0 ? false : total > shown);
-
-  const anyTruncated =
-    isTruncated(rendered.changedFiltered.length, filteredAll.changedFiltered.length) ||
-    isTruncated(rendered.addedFiltered.length, filteredAll.addedFiltered.length) ||
-    isTruncated(rendered.removedFiltered.length, filteredAll.removedFiltered.length) ||
-    isTruncated(rendered.findingsFiltered.length, filteredAll.findingsFiltered.length);
+  // derived compare logic (moved to hook)
+  const {
+    filteredAll,
+    rendered,
+    uiMs,
+    findingCountsUI,
+    findingCountsAll,
+    filtersHint,
+    anyTruncated,
+    showingText,
+    displaySingle,
+    renderChangedValue,
+  } = useCompareDerived({
+    result,
+    compareBlank,
+    hasCompared,
+    format,
+    envProfile,
+    THEME,
+    query,
+    sevHigh,
+    sevMed,
+    sevLow,
+    secretsOnly,
+    maskValues,
+    rowLimit,
+    sortMode,
+  });
 
   const downloadText = (filename: string, text: string, mime = "text/plain") => {
     const blob = new Blob([text], { type: mime });
@@ -563,7 +447,7 @@ export default function Home() {
 
   const buildReport = () => {
     if (!hasCompared) return null;
-    if ("error" in result) return null;
+    if ("error" in (result as any)) return null;
 
     const generatedAt = new Date().toISOString();
 
@@ -743,6 +627,20 @@ export default function Home() {
     }
   };
 
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const copyKeys = async (keys: string[]) => {
+    const ok = await copyText(keys.join("\n"));
+    if (!ok) alert("Copy failed (clipboard permissions).");
+  };
+
   const copyShareLink = async () => {
     setShareMsg(null);
     setShareBusy(true);
@@ -846,8 +744,8 @@ export default function Home() {
   };
 
   const loadSample = () => {
-    const l = format === "json" ? SAMPLE_LEFT_JSON : SAMPLE_LEFT_ENV;
-    const r = format === "json" ? SAMPLE_RIGHT_JSON : SAMPLE_RIGHT_ENV;
+    const l = format === "json" ? SAMPLE_LEFT_JSON : format === "yaml" ? SAMPLE_LEFT_YAML : SAMPLE_LEFT_ENV;
+    const r = format === "json" ? SAMPLE_RIGHT_JSON : format === "yaml" ? SAMPLE_RIGHT_YAML : SAMPLE_RIGHT_ENV;
 
     setLeftDraft(l);
     setRightDraft(r);
@@ -878,14 +776,9 @@ export default function Home() {
       : { bg: THEME.blueSoft2, border: THEME.borderSoft };
 
   const shareVariant = hasCompared ? "primary" : "subtle";
-  const compareLabel = format === "json" ? "Compare JSON" : "Compare Environments";
+  const compareLabel = format === "json" ? "Compare JSON" : format === "yaml" ? "Compare YAML" : "Compare Environments";
 
-  const TOOL_TABS: Array<{
-    id: ToolId;
-    label: string;
-    supported: (fmt: FormatId) => boolean;
-    implemented: boolean;
-  }> = [
+  const TOOL_TABS: Array<{ id: ToolId; label: string; supported: (fmt: FormatId) => boolean; implemented: boolean }> = [
     { id: "compare", label: "Compare", supported: () => true, implemented: true },
     { id: "format", label: "Format", supported: (f) => f === "json", implemented: false },
     { id: "minify", label: "Minify", supported: (f) => f === "json", implemented: false },
@@ -906,21 +799,12 @@ export default function Home() {
     return { disabled, title };
   };
 
-  const showingText = (shown: number, total: number) => {
-    if (rowLimit <= 0) return `Showing ${shown} (no limit)`;
-    if (shown >= total) return `Showing ${shown}`;
-    return `Showing ${shown} of ${total} (row limit ${rowLimit}, truncated)`;
-  };
-
   const applyPresetOnlyChanged = () => {
     setShowChanged(true);
     setShowAdded(false);
     setShowRemoved(false);
     setShowFindings(false);
   };
-
-  // IMPORTANT: make --seg a STRING so React definitely sets the custom property correctly.
-  const segValue = themeMode === "system" ? "0" : themeMode === "light" ? "1" : "2";
 
   // -----------------------------
   // ✅ Validate (filtered) helpers
@@ -930,105 +814,137 @@ export default function Home() {
 
   const validateTotals = validateObj?.totals ?? { high: 0, medium: 0, low: 0 };
 
-  const leftIssuesAll: any[] = Array.isArray(validateObj?.left?.issues) ? validateObj.left.issues : [];
-  const rightIssuesAll: any[] = Array.isArray(validateObj?.right?.issues) ? validateObj.right.issues : [];
+  const leftIssuesAllRaw: any[] = Array.isArray(validateObj?.left?.issues) ? validateObj.left.issues : [];
+  const rightIssuesAllRaw: any[] = Array.isArray(validateObj?.right?.issues) ? validateObj.right.issues : [];
+
+  // ✅ Enrich issues with resolved lineStart/lineEnd (so Env 1 also gets L## + click)
+  const leftIssuesAll: any[] = useMemo(() => {
+    return leftIssuesAllRaw.map((it) => {
+      const lr = resolveIssueLineRange({ issue: it, sideText: leftDraft, format, envProfile });
+      const lineStart = lr.lineStart;
+      const lineEnd = lr.lineEnd ?? lr.lineStart;
+      return {
+        ...it,
+        __lineStart: lineStart,
+        __lineEnd: lineEnd,
+        line: typeof it?.line === "number" ? it.line : lineStart,
+      };
+    });
+  }, [leftIssuesAllRaw, leftDraft, format, envProfile]);
+
+  const rightIssuesAll: any[] = useMemo(() => {
+    return rightIssuesAllRaw.map((it) => {
+      const lr = resolveIssueLineRange({ issue: it, sideText: rightDraft, format, envProfile });
+      const lineStart = lr.lineStart;
+      const lineEnd = lr.lineEnd ?? lr.lineStart;
+      return {
+        ...it,
+        __lineStart: lineStart,
+        __lineEnd: lineEnd,
+        line: typeof it?.line === "number" ? it.line : lineStart,
+      };
+    });
+  }, [rightIssuesAllRaw, rightDraft, format, envProfile]);
 
   const leftIssues = leftIssuesAll.filter((it: any) => validateSeverityEnabled(it?.severity));
   const rightIssues = rightIssuesAll.filter((it: any) => validateSeverityEnabled(it?.severity));
 
+  // ✅ Build annotations for line preview (for gutter markers + highlights)
+  const validateLeftAnnotations: LineAnnotation[] = useMemo(() => {
+    return leftIssuesAll
+      .map((it: any) => {
+        const sev = normSeverity(it?.severity) as any;
+        const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+
+        const lineStart = typeof it?.__lineStart === "number" ? it.__lineStart : extractLineRange(it).lineStart;
+        const lineEnd = typeof it?.__lineEnd === "number" ? it.__lineEnd : extractLineRange(it).lineEnd;
+
+        if (!lineStart) return null;
+        const label = String(it?.message ?? it?.key ?? "Issue");
+        return { lineStart, lineEnd: lineEnd ?? lineStart, severity: s, label };
+      })
+      .filter(Boolean) as LineAnnotation[];
+  }, [leftIssuesAll]);
+
+  const validateRightAnnotations: LineAnnotation[] = useMemo(() => {
+    return rightIssuesAll
+      .map((it: any) => {
+        const sev = normSeverity(it?.severity) as any;
+        const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+
+        const lineStart = typeof it?.__lineStart === "number" ? it.__lineStart : extractLineRange(it).lineStart;
+        const lineEnd = typeof it?.__lineEnd === "number" ? it.__lineEnd : extractLineRange(it).lineEnd;
+
+        if (!lineStart) return null;
+        const label = String(it?.message ?? it?.key ?? "Issue");
+        return { lineStart, lineEnd: lineEnd ?? lineStart, severity: s, label };
+      })
+      .filter(Boolean) as LineAnnotation[];
+  }, [rightIssuesAll]);
+
   // -----------------------------
-  // ✅ Shared: Env editors (shown on Compare + Validate)
+  // ✅ Compare annotations + line hints (for Compare tab preview + clickable findings)
   // -----------------------------
-  const envEditors =
-    tool === "compare" || tool === "validate" ? (
-      <div className="twoCol" style={{ marginTop: 14 }}>
-        <div className="cd-card">
-          <div className="cd-cardHeader">
-            <div>
-              <div className="cd-cardTitle">Environment 1</div>
-              <div className="cd-cardHint">e.g., production</div>
-            </div>
-            <div className="cd-actions">
-              <ActionButton onClick={() => pasteFromClipboard("left")} title="Paste from clipboard into Left">
-                Paste
-              </ActionButton>
-              <ActionButton variant="primary" onClick={() => leftInputRef.current?.click()}>
-                Upload
-              </ActionButton>
-              <ActionButton
-                variant="subtle"
-                onClick={() => {
-                  setLeftDraft("");
-                  setLeft("");
-                }}
-              >
-                Clear
-              </ActionButton>
-            </div>
-          </div>
+  const compareLineHints = useMemo(() => {
+    const m = new Map<string, { leftLine?: number; rightLine?: number }>();
+    if (!hasCompared) return m;
+    if ("error" in (result as any)) return m;
 
-          <div
-            className="dropZone"
-            data-active={dragOver.left ? "true" : "false"}
-            onDrop={(e) => onDrop("left", e)}
-            onDragOver={(e) => onDragOver("left", e)}
-            onDragLeave={(e) => onDragLeave("left", e)}
-            title="Drop a .env or .json file here"
-          >
-            <textarea
-              value={leftDraft}
-              onChange={(e) => setLeftDraft(e.target.value)}
-              placeholder={format === "json" ? "Paste or drop JSON here…" : "Paste or drop a .env here…"}
-              className="cd-textarea"
-            />
-            <div className="cd-tip">Tip: drag & drop a {format === "json" ? ".json" : ".env"} file here</div>
-          </div>
-        </div>
+    const list = Array.isArray(rendered?.findingsFiltered) ? rendered.findingsFiltered : [];
+    for (let idx = 0; idx < list.length; idx++) {
+      const f = list[idx];
+      const id = `${String(f?.key ?? "")}-${idx}`;
+      const lr = resolveFindingLines({ finding: f, leftText: leftDraft, rightText: rightDraft, format, envProfile });
+      m.set(id, lr);
+    }
+    return m;
+  }, [hasCompared, result, rendered, leftDraft, rightDraft, format, envProfile]);
 
-        <div className="cd-card">
-          <div className="cd-cardHeader">
-            <div>
-              <div className="cd-cardTitle">Environment 2</div>
-              <div className="cd-cardHint">e.g., staging</div>
-            </div>
-            <div className="cd-actions">
-              <ActionButton onClick={() => pasteFromClipboard("right")} title="Paste from clipboard into Right">
-                Paste
-              </ActionButton>
-              <ActionButton variant="primary" onClick={() => rightInputRef.current?.click()}>
-                Upload
-              </ActionButton>
-              <ActionButton
-                variant="subtle"
-                onClick={() => {
-                  setRightDraft("");
-                  setRight("");
-                }}
-              >
-                Clear
-              </ActionButton>
-            </div>
-          </div>
+  const compareLeftAnnotations: LineAnnotation[] = useMemo(() => {
+    if (!hasCompared) return [];
+    if ("error" in (result as any)) return [];
+    const list = Array.isArray(rendered?.findingsFiltered) ? rendered.findingsFiltered : [];
+    const out: LineAnnotation[] = [];
+    for (let idx = 0; idx < list.length; idx++) {
+      const f = list[idx];
+      const id = `${String(f?.key ?? "")}-${idx}`;
+      const hint = compareLineHints.get(id);
+      const line = hint?.leftLine;
+      if (!line) continue;
+      const sev = normSeverity(f?.severity) as any;
+      const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+      out.push({ lineStart: line, lineEnd: line, severity: s, label: String(f?.key ?? "Finding") });
+    }
+    return out;
+  }, [hasCompared, result, rendered, compareLineHints]);
 
-          <div
-            className="dropZone"
-            data-active={dragOver.right ? "true" : "false"}
-            onDrop={(e) => onDrop("right", e)}
-            onDragOver={(e) => onDragOver("right", e)}
-            onDragLeave={(e) => onDragLeave("right", e)}
-            title="Drop a .env or .json file here"
-          >
-            <textarea
-              value={rightDraft}
-              onChange={(e) => setRightDraft(e.target.value)}
-              placeholder={format === "json" ? "Paste or drop JSON here…" : "Paste or drop a .env here…"}
-              className="cd-textarea"
-            />
-            <div className="cd-tip">Tip: drag & drop a {format === "json" ? ".json" : ".env"} file here</div>
-          </div>
-        </div>
-      </div>
-    ) : null;
+  const compareRightAnnotations: LineAnnotation[] = useMemo(() => {
+    if (!hasCompared) return [];
+    if ("error" in (result as any)) return [];
+    const list = Array.isArray(rendered?.findingsFiltered) ? rendered.findingsFiltered : [];
+    const out: LineAnnotation[] = [];
+    for (let idx = 0; idx < list.length; idx++) {
+      const f = list[idx];
+      const id = `${String(f?.key ?? "")}-${idx}`;
+      const hint = compareLineHints.get(id);
+      const line = hint?.rightLine;
+      if (!line) continue;
+      const sev = normSeverity(f?.severity) as any;
+      const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+      out.push({ lineStart: line, lineEnd: line, severity: s, label: String(f?.key ?? "Finding") });
+    }
+    return out;
+  }, [hasCompared, result, rendered, compareLineHints]);
+
+  const onClearSide = (side: Side) => {
+    if (side === "left") {
+      setLeftDraft("");
+      setLeft("");
+    } else {
+      setRightDraft("");
+      setRight("");
+    }
+  };
 
   return (
     <main
@@ -1052,7 +968,7 @@ export default function Home() {
             />
             <div>
               <h1 className="cd-title">ConfigSift</h1>
-              <div className="cd-subtitle">Compare .env / JSON configs in your browser — nothing is uploaded.</div>
+              <div className="cd-subtitle">Compare .env / JSON / YAML configs in your browser — nothing is uploaded.</div>
             </div>
           </div>
 
@@ -1162,6 +1078,7 @@ export default function Home() {
                 >
                   <option value="env">.env</option>
                   <option value="json">JSON</option>
+                  <option value="yaml">YAML</option>
                 </select>
               </div>
 
@@ -1211,14 +1128,14 @@ export default function Home() {
         <input
           ref={leftInputRef}
           type="file"
-          accept=".env,.txt,.json,application/json,*/*"
+          accept=".env,.txt,.json,.yml,.yaml,application/json,text/yaml,application/x-yaml,*/*"
           style={{ display: "none" }}
           onChange={(e) => onPickFile("left", e.target.files?.[0])}
         />
         <input
           ref={rightInputRef}
           type="file"
-          accept=".env,.txt,.json,application/json,*/*"
+          accept=".env,.txt,.json,.yml,.yaml,application/json,text/yaml,application/x-yaml,*/*"
           style={{ display: "none" }}
           onChange={(e) => onPickFile("right", e.target.files?.[0])}
         />
@@ -1230,167 +1147,62 @@ export default function Home() {
           onChange={(e) => onImportShareJSON(e.target.files?.[0])}
         />
 
+        {/* Editors shown on Compare + Validate */}
+        {tool === "compare" || tool === "validate" ? (
+          <ConfigEditors
+            format={format}
+            leftDraft={leftDraft}
+            rightDraft={rightDraft}
+            setLeftDraft={setLeftDraft}
+            setRightDraft={setRightDraft}
+            dragOver={dragOver}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onPaste={pasteFromClipboard}
+            onUpload={(side) => (side === "left" ? leftInputRef.current?.click() : rightInputRef.current?.click())}
+            onClear={(side) => onClearSide(side)}
+            // ✅ line preview annotations + jump wiring
+            leftAnnotations={tool === "validate" ? validateLeftAnnotations : tool === "compare" ? compareLeftAnnotations : []}
+            rightAnnotations={tool === "validate" ? validateRightAnnotations : tool === "compare" ? compareRightAnnotations : []}
+			jumpTo={jumpTo}
+			onConsumeJumpTo={() => setJumpTo(null)}
+          />
+        ) : null}
+
         {/* Tool Content */}
         {tool === "validate" ? (
-          <>
-            {shareMsg && (
-              <div className="callout callout-info" style={{ marginTop: 12 }}>
-                {shareMsg}
-              </div>
-            )}
-
-            {/* ✅ Inputs now visible on Validate */}
-            {envEditors}
-
-            {pasteErr && (
-              <div className="callout callout-danger" style={{ marginTop: 12 }}>
-                <strong>Paste error:</strong> {pasteErr}
-              </div>
-            )}
-
-            <div className="cd-card" style={{ marginTop: 14 }}>
-              <div className="cd-cardTitle" style={{ fontSize: 16 }}>
-                Validate ({format === "env" ? ".env" : "JSON"})
-              </div>
-              <div className="cd-cardHint" style={{ marginTop: 6 }}>
-                Checks syntax + common deploy risks (required keys, localhost/unsafe URLs, wildcard CORS, debug flags, secret hygiene). Runs locally in a worker.
-              </div>
-
-              {!hasAnyDraft ? (
-                <div className="callout callout-info" style={{ marginTop: 12 }}>
-                  <strong>Paste or upload a config first.</strong> Validate runs on your current editor drafts (you don’t need to run Compare).
-                </div>
-              ) : !validateHasRun ? (
-                <div className="callout callout-info" style={{ marginTop: 12 }}>
-                  <strong>Not validated yet.</strong> Click <strong>Run Validate</strong> below (or enable Live validation).
-                </div>
-              ) : validateIsStale ? (
-                <div className="callout callout-info" style={{ marginTop: 12 }}>
-                  <strong>Edited since last validation.</strong> Click <strong>Run Validate</strong> to refresh results.
-                </div>
-              ) : null}
-
-              {hasValidateError ? (
-                <div className="callout callout-danger" style={{ marginTop: 10 }}>
-                  <strong>Error:</strong> {String((validateObj as any).error)}
-                </div>
-              ) : null}
-
-              <div className="controlRow" style={{ marginTop: 12, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                <ActionButton
-                  variant="primary"
-                  onClick={runValidate}
-                  disabled={!hasAnyDraft as any}
-                  title={!hasAnyDraft ? "Paste/upload at least one config draft first" : "Run validation now"}
-                >
-                  {validateStatus === "Idle" ? "Run Validate" : "Validating…"}
-                </ActionButton>
-
-                <Toggle label="Live validation" checked={validateLive} onChange={setValidateLive} />
-
-                <span style={{ width: 10 }} />
-
-                <span className="pill" title="Validation status">
-                  {validateStatus !== "Idle"
-                    ? "Validating…"
-                    : validateHasRun
-                    ? `Validated${validateMs != null ? ` in ${validateMs}ms` : ""}`
-                    : "Not validated"}
-                </span>
-
-                {validateHasRun && lastValidatedAt != null ? (
-                  <span className="pill" title="Last validated time">
-                    Last validated {timeAgo(Date.now() - lastValidatedAt)}
-                  </span>
-                ) : null}
-
-                {/* ✅ Clickable severity filters */}
-                <SevChip sev="high" count={validateTotals.high ?? 0} checked={vSevHigh} onChange={setVSevHigh} />
-                <SevChip sev="medium" count={validateTotals.medium ?? 0} checked={vSevMed} onChange={setVSevMed} />
-                <SevChip sev="low" count={validateTotals.low ?? 0} checked={vSevLow} onChange={setVSevLow} />
-              </div>
-            </div>
-
-            <div className="twoCol" style={{ marginTop: 14 }}>
-              <div className="cd-card">
-                <div className="cd-cardHeader">
-                  <div>
-                    <div className="cd-cardTitle">Environment 1</div>
-                    <div className="cd-cardHint">
-                      Issues found: {leftIssues.length}
-                      {leftIssues.length !== leftIssuesAll.length ? ` (filtered from ${leftIssuesAll.length})` : ""}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ padding: 12 }}>
-                  {!hasAnyDraft ? (
-                    <div className="mutedSm">Paste/upload a config to validate.</div>
-                  ) : leftIssuesAll.length === 0 ? (
-                    <div className="mutedSm">No issues detected.</div>
-                  ) : leftIssues.length === 0 ? (
-                    <div className="mutedSm">No issues at the selected severities.</div>
-                  ) : (
-                    <div className="findingList">
-                      {leftIssues.map((it: any, idx: number) => {
-                        const sev = normSeverity(it?.severity);
-                        return (
-                          <div key={`l-${idx}`} className="finding" data-sev={sev}>
-                            <div className="findingTop">
-                              <div className="mono findingKey">{it?.key ? String(it.key) : "Syntax"}</div>
-                              <span className={`sev sev-${sev}`}>{sev}</span>
-                            </div>
-                            <div className="findingMsg">{String(it?.message ?? "")}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="cd-card">
-                <div className="cd-cardHeader">
-                  <div>
-                    <div className="cd-cardTitle">Environment 2</div>
-                    <div className="cd-cardHint">
-                      Issues found: {rightIssues.length}
-                      {rightIssues.length !== rightIssuesAll.length ? ` (filtered from ${rightIssuesAll.length})` : ""}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ padding: 12 }}>
-                  {!hasAnyDraft ? (
-                    <div className="mutedSm">Paste/upload a config to validate.</div>
-                  ) : rightIssuesAll.length === 0 ? (
-                    <div className="mutedSm">No issues detected.</div>
-                  ) : rightIssues.length === 0 ? (
-                    <div className="mutedSm">No issues at the selected severities.</div>
-                  ) : (
-                    <div className="findingList">
-                      {rightIssues.map((it: any, idx: number) => {
-                        const sev = normSeverity(it?.severity);
-                        return (
-                          <div key={`r-${idx}`} className="finding" data-sev={sev}>
-                            <div className="findingTop">
-                              <div className="mono findingKey">{it?.key ? String(it.key) : "Syntax"}</div>
-                              <span className={`sev sev-${sev}`}>{sev}</span>
-                            </div>
-                            <div className="findingMsg">{String(it?.message ?? "")}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ padding: "18px 4px 30px", color: THEME.muted, fontSize: 12, textAlign: "center" }}>
-              © {new Date().getFullYear()} ConfigSift • All processing in your browser — nothing uploaded.
-            </div>
-          </>
+          <ValidatePanel
+            format={format}
+            THEME={THEME}
+            shareMsg={shareMsg}
+            pasteErr={pasteErr}
+            hasAnyDraft={hasAnyDraft}
+            validateStatus={validateStatus}
+            runValidate={runValidate}
+            validateHasRun={validateHasRun}
+            validateIsStale={validateIsStale}
+            hasValidateError={hasValidateError}
+            validateErrorText={hasValidateError ? String((validateObj as any).error ?? "") : null}
+            yamlStrict={yamlStrict}
+            setYamlStrict={setYamlStrict}
+            validateTotals={validateTotals}
+            vSevHigh={vSevHigh}
+            vSevMed={vSevMed}
+            vSevLow={vSevLow}
+            setVSevHigh={setVSevHigh}
+            setVSevMed={setVSevMed}
+            setVSevLow={setVSevLow}
+            leftIssuesAll={leftIssuesAll}
+            rightIssuesAll={rightIssuesAll}
+            leftIssues={leftIssues}
+            rightIssues={rightIssues}
+            // ✅ click issue → jump preview
+            onJumpToLine={(side, line) => {
+              setTool("validate");
+              setJumpTo({ side, line });
+            }}
+          />
         ) : tool !== "compare" ? (
           <div className="cd-card" style={{ marginTop: 14 }}>
             <div className="cd-cardTitle" style={{ fontSize: 16 }}>
@@ -1401,300 +1213,71 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <>
-            {shareMsg && (
-              <div className="callout callout-info" style={{ marginTop: 12 }}>
-                {shareMsg}
-              </div>
-            )}
-
-            {/* ✅ Inputs (Compare) */}
-            {envEditors}
-
-            {pasteErr && (
-              <div className="callout callout-danger" style={{ marginTop: 12 }}>
-                <strong>Paste error:</strong> {pasteErr}
-              </div>
-            )}
-
-            <section style={{ marginTop: 18 }}>
-              <div className="sectionTitleRow">
-                <h2 className="sectionTitle">Summary</h2>
-                <div className="sectionTitleRight">
-                  <span className="pill" title="Everything runs locally">
-                    Browser-only · No uploads
-                  </span>
-                </div>
-              </div>
-
-              <div className="cd-card" style={{ marginTop: 10 }}>
-                <div className="cd-controls">
-                  {!draftReady ? (
-                    <div className="callout callout-info" style={{ marginBottom: 10 }}>
-                      <strong>Next step:</strong> Paste/upload both configs, then click <strong>{compareLabel}</strong>.
-                    </div>
-                  ) : !hasCompared ? (
-                    <div className="callout callout-info" style={{ marginBottom: 10 }}>
-                      <strong>Ready:</strong> Click <strong>{compareLabel}</strong> to generate diffs and findings.
-                    </div>
-                  ) : null}
-
-                  {"error" in (result as any) ? (
-                    <div className="callout callout-danger" style={{ marginBottom: 10 }}>
-                      <strong>Error:</strong> {(result as any).error}
-                    </div>
-                  ) : null}
-
-                  <div className="controlRow">
-                    <div className="controlLabel">Search</div>
-                    <input
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Filter keys/values (e.g., S3, JWT, DATABASE, DEBUG)…"
-                      className="cd-input"
-                    />
-                    <ActionButton variant="subtle" onClick={() => setQuery("")}>
-                      Clear
-                    </ActionButton>
-                  </div>
-
-                  <div className="controlRow" style={{ alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                    <div className="controlLabel">Show</div>
-                    <Toggle label="Changed" checked={showChanged} onChange={setShowChanged} />
-                    <Toggle label="Added" checked={showAdded} onChange={setShowAdded} />
-                    <Toggle label="Removed" checked={showRemoved} onChange={setShowRemoved} />
-                    <Toggle label="Findings" checked={showFindings} onChange={setShowFindings} />
-                    <ActionButton variant="subtle" onClick={applyPresetOnlyChanged} title="Quick preset: show only Changed">
-                      Only Changed
-                    </ActionButton>
-
-                    <span style={{ width: 10 }} />
-
-                    <div className="controlLabel">Privacy</div>
-                    <Toggle label="Mask values" checked={maskValues} onChange={setMaskValues} />
-                    <Toggle label="Secrets only" checked={secretsOnly} onChange={setSecretsOnly} />
-
-                    <ActionButton
-                      variant={showMore ? "primary" : "subtle"}
-                      onClick={() => setShowMore((v) => !v)}
-                      title="Advanced controls"
-                    >
-                      {showMore ? "More ▴" : "More ▾"}
-                    </ActionButton>
-                  </div>
-
-                  {showMore && (
-                    <div className="cd-card" style={{ marginTop: 10, padding: 12, background: THEME.card2 }}>
-                      {format === "env" ? (
-                        <div className="controlRow">
-                          <div className="controlLabel">Parsing</div>
-                          <div className="controlHelp">Mode</div>
-                          <select
-                            value={envProfile}
-                            onChange={(e) => setEnvProfile(e.target.value as EnvProfileId)}
-                            className="cd-select"
-                            title="Choose how .env lines are interpreted"
-                          >
-                            <option value="dotenv">Dotenv (.env) — allow export KEY=VALUE</option>
-                            <option value="compose">Docker Compose env_file — KEY=VALUE only</option>
-                          </select>
-                          <span className="mutedSm">(changes how “export KEY=…” is handled)</span>
-                        </div>
-                      ) : (
-                        <div className="controlRow">
-                          <div className="controlLabel">Parsing</div>
-                          <span className="mutedSm">JSON is flattened into dot-path keys (e.g., db.host).</span>
-                          <span className="mutedSm" style={{ opacity: 0.7 }}>
-                            (Array mode options coming soon)
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="controlRow">
-                        <div className="controlLabel">Severity</div>
-                        <Toggle label="High" checked={sevHigh} onChange={setSevHigh} />
-                        <Toggle label="Medium" checked={sevMed} onChange={setSevMed} />
-                        <Toggle label="Low" checked={sevLow} onChange={setSevLow} />
-                        <span className="mutedSm">(applies to Risk Findings)</span>
-                      </div>
-
-                      <div className="controlRow">
-                        <div className="controlLabel">Sort</div>
-                        <div className="controlHelp">Mode</div>
-                        <select value={sortMode} onChange={(e) => setSortMode(e.target.value as SortMode)} className="cd-select">
-                          <option value="none">None (input order)</option>
-                          <option value="key_asc">Key A → Z</option>
-                          <option value="key_desc">Key Z → A</option>
-                          <option value="severity_desc" disabled={!showFindings}>
-                            Severity (Findings only)
-                          </option>
-                        </select>
-                      </div>
-
-                      <div className="controlRow">
-                        <div className="controlLabel">Render</div>
-                        <div className="controlHelp">Row limit</div>
-                        <input
-                          type="number"
-                          value={rowLimit}
-                          min={0}
-                          step={50}
-                          onChange={(e) => setRowLimit(parseInt(e.target.value || "0", 10))}
-                          className="cd-number"
-                        />
-                        <span className="mutedSm">(applies after filters; prevents UI freezes on huge diffs)</span>
-
-                        {anyTruncated && (
-                          <span className="inlineCluster">
-                            <span className="pill" title="Some sections are truncated by the row limit.">
-                              Truncated
-                            </span>
-                            <ActionButton variant="subtle" onClick={() => setRowLimit(0)} title="Show all rows (may slow UI on huge diffs)">
-                              Show all (may slow)
-                            </ActionButton>
-                            <ActionButton variant="subtle" onClick={() => setRowLimit(500)} title="Reset row limit to 500">
-                              Reset
-                            </ActionButton>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {(secretsOnly || q || rowLimit > 0 || (!sevHigh || !sevMed || !sevLow) || !hasCompared) && (
-                    <div className="callout callout-info">
-                      <strong>Note:</strong> {filtersHint}
-                    </div>
-                  )}
-
-                  <div className="exportRow">
-                    <ActionButton
-                      onClick={() => {
-                        const report = buildReport();
-                        if (!report) return;
-                        downloadText(`configsift-report-${Date.now()}.json`, JSON.stringify(report, null, 2), "application/json");
-                      }}
-                      disabled={!hasCompared || "error" in (result as any)}
-                      title={!hasCompared ? "Run Compare first" : undefined}
-                    >
-                      Download JSON
-                    </ActionButton>
-
-                    <ActionButton
-                      onClick={() => {
-                        const report = buildReport();
-                        if (!report) return;
-                        downloadText(`configsift-report-${Date.now()}.md`, reportToMarkdown(report), "text/markdown");
-                      }}
-                      disabled={!hasCompared || "error" in (result as any)}
-                      title={!hasCompared ? "Run Compare first" : undefined}
-                    >
-                      Download Markdown
-                    </ActionButton>
-
-                    <ActionButton variant="subtle" onClick={downloadShareJSON} title="Export inputs + UI settings (for sharing large configs)">
-                      Share JSON
-                    </ActionButton>
-                    <ActionButton variant="subtle" onClick={() => shareImportRef.current?.click()} title="Import inputs + UI settings from Share JSON">
-                      Import Share JSON
-                    </ActionButton>
-
-                    <ActionButton variant="subtle" onClick={clearSavedDraft} title="Clear saved draft from this browser">
-                      Clear saved
-                    </ActionButton>
-                  </div>
-                </div>
-              </div>
-
-              <div className="badgeRow">
-                <Badge label={`Changed: ${filteredAll.changedFiltered.length}`} variant="changed" />
-                <Badge label={`Added: ${filteredAll.addedFiltered.length}`} variant="added" />
-                <Badge label={`Removed: ${filteredAll.removedFiltered.length}`} variant="removed" />
-                <Badge label={`Critical: ${findingCountsUI.critical} / ${findingCountsAll.critical}`} variant="critical" />
-                <Badge label={`Suggestions: ${findingCountsUI.suggestions} / ${findingCountsAll.suggestions}`} variant="suggestions" />
-                <Badge label={`Findings: ${filteredAll.findingsFiltered.length} / ${findingCountsAll.total}`} variant="findings" />
-              </div>
-            </section>
-
-            {hasCompared && !("error" in (result as any)) ? (
-              <>
-                {showChanged && (
-                  <Section
-                    title={`Changed — ${showingText(rendered.changedFiltered.length, filteredAll.changedFiltered.length)}`}
-                    rightSlot={<ActionButton onClick={() => copyKeys(filteredAll.changedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
-                  >
-                    <div className="rows">
-                      {rendered.changedFiltered.map((c: any) => (
-                        <RowNode key={c.key} k={c.key} vNode={renderChangedValue(c)} />
-                      ))}
-                    </div>
-                  </Section>
-                )}
-
-                {showAdded && (
-                  <Section
-                    title={`Added — ${showingText(rendered.addedFiltered.length, filteredAll.addedFiltered.length)}`}
-                    rightSlot={<ActionButton onClick={() => copyKeys(filteredAll.addedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
-                  >
-                    <div className="rows">
-                      {rendered.addedFiltered.map((a: any) => (
-                        <Row key={a.key} k={a.key} v={displaySingle(a.key, a.value)} />
-                      ))}
-                    </div>
-                  </Section>
-                )}
-
-                {showRemoved && (
-                  <Section
-                    title={`Removed — ${showingText(rendered.removedFiltered.length, filteredAll.removedFiltered.length)}`}
-                    rightSlot={<ActionButton onClick={() => copyKeys(filteredAll.removedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
-                  >
-                    <div className="rows">
-                      {rendered.removedFiltered.map((r: any) => (
-                        <Row key={r.key} k={r.key} v={displaySingle(r.key, r.value)} />
-                      ))}
-                    </div>
-                  </Section>
-                )}
-
-                {showFindings && (
-                  <Section
-                    title={`Risk Findings — ${showingText(rendered.findingsFiltered.length, filteredAll.findingsFiltered.length)}`}
-                    rightSlot={<ActionButton onClick={() => copyKeys(filteredAll.findingsFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
-                  >
-                    {rendered.findingsFiltered.length === 0 ? (
-                      <div className="mutedSm" style={{ padding: "6px 2px" }}>
-                        No findings.
-                      </div>
-                    ) : (
-                      <div className="findingList">
-                        {rendered.findingsFiltered.map((f: any, idx: number) => {
-                          const sev = normSeverity(f.severity);
-                          return (
-                            <div key={`${f.key}-${idx}`} className="finding" data-sev={sev}>
-                              <div className="findingTop">
-                                <div className="mono findingKey">{f.key}</div>
-                                <span className={`sev sev-${sev}`}>{sev}</span>
-                              </div>
-                              <div className="findingMsg">{f.message}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Section>
-                )}
-
-                <div style={{ padding: "18px 4px 30px", color: THEME.muted, fontSize: 12, textAlign: "center" }}>
-                  © {new Date().getFullYear()} ConfigSift • All processing in your browser — nothing uploaded.
-                </div>
-              </>
-            ) : (
-              <div style={{ padding: "18px 4px 30px", color: THEME.muted, fontSize: 12, textAlign: "center" }}>
-                © {new Date().getFullYear()} ConfigSift • All processing in your browser — nothing uploaded.
-              </div>
-            )}
-          </>
+          <ComparePanel
+            THEME={THEME}
+            shareMsg={shareMsg}
+            pasteErr={pasteErr}
+            compareLabel={compareLabel}
+            draftReady={draftReady}
+            hasCompared={hasCompared}
+            result={result}
+            query={query}
+            setQuery={setQuery}
+            showChanged={showChanged}
+            setShowChanged={setShowChanged}
+            showAdded={showAdded}
+            setShowAdded={setShowAdded}
+            showRemoved={showRemoved}
+            setShowRemoved={setShowRemoved}
+            showFindings={showFindings}
+            setShowFindings={setShowFindings}
+            sevHigh={sevHigh}
+            setSevHigh={setSevHigh}
+            sevMed={sevMed}
+            setSevMed={setSevMed}
+            sevLow={sevLow}
+            setSevLow={setSevLow}
+            maskValues={maskValues}
+            setMaskValues={setMaskValues}
+            secretsOnly={secretsOnly}
+            setSecretsOnly={setSecretsOnly}
+            showMore={showMore}
+            setShowMore={setShowMore as any}
+            format={format}
+            envProfile={envProfile}
+            setEnvProfile={setEnvProfile}
+            rowLimit={rowLimit}
+            setRowLimit={setRowLimit}
+            sortMode={sortMode}
+            setSortMode={setSortMode}
+            anyTruncated={anyTruncated}
+            filtersHint={filtersHint}
+            applyPresetOnlyChanged={applyPresetOnlyChanged}
+            onDownloadJSON={() => {
+              const report = buildReport();
+              if (!report) return;
+              downloadText(`configsift-report-${Date.now()}.json`, JSON.stringify(report, null, 2), "application/json");
+            }}
+            onDownloadMarkdown={() => {
+              const report = buildReport();
+              if (!report) return;
+              downloadText(`configsift-report-${Date.now()}.md`, reportToMarkdown(report), "text/markdown");
+            }}
+            onDownloadShareJSON={downloadShareJSON}
+            onTriggerImportShareJSON={() => shareImportRef.current?.click()}
+            onClearSavedDraft={clearSavedDraft}
+            filteredAll={filteredAll}
+            rendered={rendered}
+            findingCountsUI={findingCountsUI}
+            findingCountsAll={findingCountsAll}
+            showingText={showingText}
+            copyKeys={copyKeys}
+            renderChangedValue={renderChangedValue}
+            displaySingle={displaySingle}
+            // ✅ Compare click → jump
+            getFindingLineHint={(id) => compareLineHints.get(id) ?? null}
+            onJumpToLine={(side, line) => setJumpTo({ side, line })}
+          />
         )}
       </div>
     </main>

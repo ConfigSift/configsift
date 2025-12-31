@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 
 type EnvProfileId = "dotenv" | "compose";
-type FormatId = "env" | "json";
+type FormatId = "env" | "json" | "yaml";
+
 
 type WorkerReq = {
   requestId: number;

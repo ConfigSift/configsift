@@ -106,7 +106,6 @@ export function SevChip({
   );
 }
 
-
 export function Section({
   title,
   children,

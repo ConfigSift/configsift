@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type EnvProfileId = "dotenv" | "compose";
-type FormatId = "env" | "json";
+type FormatId = "env" | "json" | "yaml";
 
 type WorkerReq = {
   requestId: number;
@@ -10,6 +10,7 @@ type WorkerReq = {
   right: string;
   format: FormatId;
   profile?: EnvProfileId;
+  yamlStrict?: boolean;
 };
 
 type WorkerRes =
@@ -23,6 +24,7 @@ type Payload = {
   right: string;
   format: FormatId;
   profile: EnvProfileId;
+  yamlStrict: boolean;
 };
 
 export function useConfigValidate(
@@ -33,30 +35,41 @@ export function useConfigValidate(
     profile?: EnvProfileId;
     format?: FormatId;
     enabled?: boolean; // when true, auto-validate on (debounced) edits
+    yamlStrict?: boolean; // YAML only: duplicates are errors
+    debug?: boolean; // ✅ NEW: logs worker req/res to console
   }
 ) {
   const debounceMs = opts?.debounceMs ?? 250;
   const profile = opts?.profile ?? "dotenv";
   const format = opts?.format ?? "env";
   const enabled = opts?.enabled ?? true;
+  const yamlStrict = opts?.yamlStrict ?? false;
+  const debug = opts?.debug ?? false;
 
-  // debounced inputs (only used for auto/live validation)
+  // Keep "stable" copies for debounced auto-validation.
   const [leftStable, setLeftStable] = useState(left);
   const [rightStable, setRightStable] = useState(right);
 
+  // ✅ NEW: keep stable values in sync even when enabled=false
+  // (no auto-validate will run, but if you later enable it, stables are current)
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setLeftStable(left);
+      return;
+    }
     const t = setTimeout(() => setLeftStable(left), debounceMs);
     return () => clearTimeout(t);
   }, [left, debounceMs, enabled]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setRightStable(right);
+      return;
+    }
     const t = setTimeout(() => setRightStable(right), debounceMs);
     return () => clearTimeout(t);
   }, [right, debounceMs, enabled]);
 
-  // worker lifecycle
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const latestHandledRef = useRef(0);
@@ -72,7 +85,6 @@ export function useConfigValidate(
   const [hasRun, setHasRun] = useState(false);
   const [lastValidatedAt, setLastValidatedAt] = useState<number | null>(null);
 
-  // prevent duplicate posts (e.g., manual run on tab open + auto run when live toggles on)
   const lastSentRef = useRef<Payload | null>(null);
 
   const post = useCallback(
@@ -86,7 +98,8 @@ export function useConfigValidate(
         last.left === payload.left &&
         last.right === payload.right &&
         last.format === payload.format &&
-        last.profile === payload.profile;
+        last.profile === payload.profile &&
+        last.yamlStrict === payload.yamlStrict;
 
       if (!force && same) return;
 
@@ -95,21 +108,33 @@ export function useConfigValidate(
       const requestId = ++requestIdRef.current;
       setStatus("Validating…");
 
+      if (debug) {
+        console.log("[validate] postMessage", {
+          requestId,
+          format: payload.format,
+          profile: payload.profile,
+          yamlStrict: payload.yamlStrict,
+          leftLen: payload.left?.length ?? 0,
+          rightLen: payload.right?.length ?? 0,
+        });
+      }
+
       w.postMessage({
         requestId,
         left: payload.left,
         right: payload.right,
         format: payload.format,
         profile: payload.profile,
+        yamlStrict: payload.yamlStrict,
       } satisfies WorkerReq);
     },
-    []
+    [debug]
   );
 
-  // manual run() (used by "Run Validate" button + auto-run on tab open)
+  // Manual trigger: validate exactly the current hook inputs.
   const run = useCallback(() => {
-    post({ left, right, format, profile }, true);
-  }, [left, right, format, profile, post]);
+    post({ left, right, format, profile, yamlStrict }, true);
+  }, [left, right, format, profile, yamlStrict, post]);
 
   useEffect(() => {
     const w = new Worker(new URL("../validate.worker.ts", import.meta.url), { type: "module" });
@@ -120,6 +145,10 @@ export function useConfigValidate(
       if (msg.requestId < latestHandledRef.current) return;
       latestHandledRef.current = msg.requestId;
 
+      if (debug) {
+        console.log("[validate] worker response", msg);
+      }
+
       setEngineMs(msg.ms);
       setStatus("Idle");
       setHasRun(true);
@@ -129,17 +158,25 @@ export function useConfigValidate(
       else setResult({ error: msg.error });
     };
 
+    w.onerror = (err) => {
+      if (debug) console.error("[validate] worker error", err);
+      setStatus("Idle");
+      setHasRun(true);
+      setLastValidatedAt(Date.now());
+      setResult({ error: String((err as any)?.message ?? "Validate worker error") });
+    };
+
     return () => {
       w.terminate();
       workerRef.current = null;
     };
-  }, []);
+  }, [debug]);
 
-  // auto/live validate on stable edits (when enabled)
+  // Auto validate (debounced) when enabled=true.
   useEffect(() => {
     if (!enabled) return;
-    post({ left: leftStable, right: rightStable, format, profile }, false);
-  }, [leftStable, rightStable, format, profile, enabled, post]);
+    post({ left: leftStable, right: rightStable, format, profile, yamlStrict }, false);
+  }, [leftStable, rightStable, format, profile, yamlStrict, enabled, post]);
 
   return { result, engineMs, status, run, hasRun, lastValidatedAt };
 }

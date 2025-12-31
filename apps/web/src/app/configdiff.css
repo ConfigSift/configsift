@@ -17,6 +17,14 @@
 
   /* Badge dot glow (light) */
   --badge-dot-glow: rgba(74, 127, 235, 0.12);
+
+  /* ✅ Select theming (light) */
+  --cd-select-bg: rgba(255, 255, 255, 0.95);
+  --cd-select-border: rgba(53, 56, 83, 0.10);
+  --cd-select-border-hover: rgba(74, 127, 235, 0.24);
+  --cd-select-shadow: 0 10px 24px rgba(16, 21, 40, 0.10);
+  --cd-select-option-bg: #ffffff;
+  --cd-select-option-text: #121528;
 }
 
 html[data-theme="dark"] {
@@ -30,6 +38,14 @@ html[data-theme="dark"] {
 
   /* Badge dot glow (dark) */
   --badge-dot-glow: rgba(77, 163, 255, 0.14);
+
+  /* ✅ Select theming (dark) */
+  --cd-select-bg: rgba(255, 255, 255, 0.06);
+  --cd-select-border: rgba(231, 236, 255, 0.14);
+  --cd-select-border-hover: rgba(77, 163, 255, 0.28);
+  --cd-select-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  --cd-select-option-bg: #0C121B;
+  --cd-select-option-text: rgba(232, 238, 249, 0.92);
 }
 
 .cd-page {
@@ -554,13 +570,53 @@ html[data-theme="dark"] {
   border-color: rgba(74, 127, 235, 0.30);
 }
 
+/* ✅ UPDATED: prettier .cd-select + consistent light/dark, with custom chevron */
 .cd-select {
-  padding: 8px 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  padding: 8px 38px 8px 12px; /* room for arrow */
   border-radius: 12px;
-  border: 1px solid rgba(53, 56, 83, 0.10);
-  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--cd-select-border);
+
+  background-color: var(--cd-select-bg);
+  color: inherit;
+
   font-size: 13px;
-  color: #121528;
+  line-height: 1.1;
+
+  box-shadow: var(--cd-select-shadow);
+  transition: border-color 160ms ease, transform 160ms ease, background-color 160ms ease;
+  outline: none;
+
+  /* Custom arrow using currentColor */
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.cd-select:hover {
+  border-color: var(--cd-select-border-hover);
+}
+
+.cd-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.16);
+  border-color: rgba(74, 127, 235, 0.30);
+  transform: translateY(-1px);
+}
+
+/* ✅ Dropdown menu (where browser allows styling) */
+.cd-select option,
+.cd-select optgroup {
+  background-color: var(--cd-select-option-bg);
+  color: var(--cd-select-option-text);
 }
 
 .cd-number {
@@ -619,51 +675,6 @@ html[data-theme="dark"] {
   flex-wrap: wrap;
   margin-left: 6px;
 }
-
-/* ===== Severity chips (Validate filters) ===== */
-
-.sevChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(53, 56, 83, 0.10);
-  background: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
-  color: #121528;
-  cursor: pointer;
-  user-select: none;
-  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
-}
-
-.sevChip:hover {
-  background: #f5f6fc;
-  border-color: rgba(74, 127, 235, 0.24);
-}
-
-.sevChip:active {
-  transform: translateY(1px);
-}
-
-.sevChip:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.18);
-  border-color: rgba(74, 127, 235, 0.30);
-}
-
-/* Dot + severity colors */
-.sevChip .dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--dot, #7C6FDB);
-  box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.12);
-}
-
-.sevChip[data-sev="high"] { --dot: #DB7B5C; }
-.sevChip[data-sev="medium"] { --dot: #F0B35B; }
-.sevChip[data-sev="low"] { --dot: #46B37A; }
 
 /* ===== Severity chips (Validate filters) ===== */
 
@@ -852,6 +863,287 @@ html[data-theme="dark"] .sevChip .dot {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ============================
+   Preview (under editors)
+   - Styles the collapsible "Preview (with line numbers)" section
+   - Works in light + dark mode
+   ============================ */
+
+/* The preview toggle button (it has aria-expanded) */
+.dropZone .btn[aria-expanded] {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 10px 12px;
+  border-radius: 14px;
+
+  font-weight: 780;
+  letter-spacing: -0.01em;
+
+  /* "premium" feel without changing your theme */
+  box-shadow: 0 10px 22px rgba(16, 21, 40, 0.08);
+  transition: transform 120ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.dropZone .btn[aria-expanded]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(16, 21, 40, 0.10);
+}
+
+/* Preview container (it uses .rows inside the dropZone) */
+.dropZone .rows {
+  background: rgba(255, 255, 255, 0.70);
+  border-color: rgba(53, 56, 83, 0.10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+/* Make preview text crisp */
+.dropZone .rows pre {
+  color: inherit;
+  line-height: 1.55;
+}
+
+/* Nicer scrollbars (supported browsers only) */
+.dropZone .rows {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(74, 127, 235, 0.40) transparent;
+}
+
+.dropZone .rows::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.dropZone .rows::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dropZone .rows::-webkit-scrollbar-thumb {
+  background: rgba(74, 127, 235, 0.32);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.dropZone .rows::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 127, 235, 0.45);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* Dark mode adjustments */
+html[data-theme="dark"] .dropZone .btn[aria-expanded] {
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.40);
+}
+
+html[data-theme="dark"] .dropZone .btn[aria-expanded]:hover {
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48);
+}
+
+html[data-theme="dark"] .dropZone .rows {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] .dropZone .rows {
+  scrollbar-color: rgba(77, 163, 255, 0.48) transparent;
+}
+
+html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb {
+  background: rgba(77, 163, 255, 0.36);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb:hover {
+  background: rgba(77, 163, 255, 0.50);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* =====================================
+   Line preview + gutter markers (polish)
+   ===================================== */
+
+.cd-editorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.cd-editorFooterRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cd-previewWrap {
+  margin-top: 10px;
+}
+
+.cd-previewBox {
+  border-radius: 14px;
+  border: 1px solid rgba(53, 56, 83, 0.10);
+  background: rgba(255, 255, 255, 0.75);
+  overflow: auto;
+  max-height: 230px;
+}
+
+/* Prevent browser scroll anchoring from snapping the preview back to top */
+.cd-previewBox {
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  scroll-behavior: auto; /* ensure no smooth scroll interference */
+}
+
+/* Extra insurance: disable anchoring for children too */
+.cd-previewBox * {
+  overflow-anchor: none;
+}
+
+
+.cd-lineRow {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 10px;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(53, 56, 83, 0.08);
+}
+
+.cd-lineRow:first-child {
+  border-top: 0;
+}
+
+.cd-gutter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  user-select: none;
+  color: rgba(91, 95, 119, 0.85);
+}
+
+.cd-ln {
+  width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.cd-gutterMark {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.10);
+}
+
+.cd-lineText {
+  margin: 0;
+  white-space: pre;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Highlight lines that have any annotation */
+.cd-lineRow[data-hit="true"] {
+  background: rgba(74, 127, 235, 0.08);
+}
+
+/* Severity marker colors */
+.cd-lineRow[data-sev="high"] .cd-gutterMark {
+  background: #DB7B5C;
+  box-shadow: 0 0 0 4px rgba(219, 123, 92, 0.18);
+}
+.cd-lineRow[data-sev="medium"] .cd-gutterMark {
+  background: #F0B35B;
+  box-shadow: 0 0 0 4px rgba(240, 179, 91, 0.18);
+}
+.cd-lineRow[data-sev="low"] .cd-gutterMark {
+  background: #46B37A;
+  box-shadow: 0 0 0 4px rgba(70, 179, 122, 0.16);
+}
+
+/* Flash on jump */
+@keyframes cdFlash {
+  0% { box-shadow: inset 0 0 0 0 rgba(74,127,235,0); }
+  20% { box-shadow: inset 0 0 0 2000px rgba(74,127,235,0.14); }
+  100% { box-shadow: inset 0 0 0 0 rgba(74,127,235,0); }
+}
+.cd-lineRow.flash {
+  animation: cdFlash 900ms ease;
+}
+
+/* L## pill on findings cards */
+.cd-linePill {
+  border: 1px solid rgba(53, 56, 83, 0.12);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.cd-linePill:hover {
+  border-color: rgba(74, 127, 235, 0.30);
+  background: rgba(74, 127, 235, 0.10);
+}
+
+/* Make line pills work as <button> without browser default styling */
+.cd-linePill {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(53, 56, 83, 0.12);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.cd-linePill:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.18);
+  border-color: rgba(74, 127, 235, 0.30);
+}
+
+
+/* Dark mode */
+html[data-theme="dark"] .cd-previewBox {
+  border-color: rgba(231,236,255,0.14);
+  background: rgba(255,255,255,0.04);
+}
+html[data-theme="dark"] .cd-lineRow {
+  border-top-color: rgba(231,236,255,0.10);
+}
+html[data-theme="dark"] .cd-gutter {
+  color: rgba(232,238,249,0.60);
+}
+html[data-theme="dark"] .cd-lineRow[data-hit="true"] {
+  background: rgba(77,163,255,0.10);
+}
+html[data-theme="dark"] .cd-linePill {
+  border-color: rgba(231,236,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: rgba(232,238,249,0.92);
+}
+html[data-theme="dark"] .cd-linePill:hover {
+  border-color: rgba(77,163,255,0.30);
+  background: rgba(77,163,255,0.14);
+}
+
+
 
 /* ===== Findings ===== */
 
@@ -1109,10 +1401,11 @@ html[data-theme="dark"] .controlRow {
   border-color: rgba(231,236,255,0.12);
 }
 
+/* ✅ IMPORTANT FIX: use background-color so we don't wipe .cd-select's arrow background-image */
 html[data-theme="dark"] .cd-input,
 html[data-theme="dark"] .cd-select,
 html[data-theme="dark"] .cd-number {
-  background: rgba(255,255,255,0.06);
+  background-color: rgba(255,255,255,0.06);
   border-color: rgba(231,236,255,0.14);
 }
 
@@ -1192,3 +1485,78 @@ html[data-theme="dark"] .callout-danger {
 html[data-theme="dark"] .cd-footer {
   color: rgba(232,238,249,0.65);
 }
+
+/* ===== Preview box + code gutter (MIN) ===== */
+
+.cd-previewPanel {
+  border-radius: 12px;
+  border: 1px solid rgba(53, 56, 83, 0.10);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.70);
+}
+
+.cd-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cd-codeRow {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 10px;
+  padding: 4px 10px;
+  border-top: 1px solid rgba(53, 56, 83, 0.06);
+  align-items: start;
+}
+
+.cd-codeRow:first-child { border-top: 0; }
+
+.cd-codeGutter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: rgba(91, 95, 119, 0.85);
+  user-select: none;
+}
+
+.cd-codeLineNo { width: 34px; text-align: right; opacity: 0.85; }
+.cd-codeMarker { width: 20px; text-align: center; opacity: 0.95; }
+
+.cd-codeText { margin: 0; white-space: pre; overflow-x: auto; }
+
+.cd-codeRow[data-sev="high"] { background: rgba(219, 123, 92, 0.10); }
+.cd-codeRow[data-sev="medium"], .cd-codeRow[data-sev="low"] { background: rgba(240, 179, 91, 0.10); }
+
+.cd-codeRow[data-range="true"] {
+  background-image: linear-gradient(90deg, rgba(74, 127, 235, 0.08), transparent);
+}
+
+.cd-codeRowFlash {
+  outline: 2px solid rgba(74, 127, 235, 0.45);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+html[data-theme="dark"] .cd-previewPanel {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.14);
+}
+
+html[data-theme="dark"] .cd-codeRow {
+  border-top-color: rgba(231, 236, 255, 0.10);
+}
+
+html[data-theme="dark"] .cd-codeGutter {
+  color: rgba(232, 238, 249, 0.65);
+}
+
+html[data-theme="dark"] .cd-codeRow[data-sev="high"] { background: rgba(219, 123, 92, 0.14); }
+html[data-theme="dark"] .cd-codeRow[data-sev="medium"],
+html[data-theme="dark"] .cd-codeRow[data-sev="low"] { background: rgba(240, 179, 91, 0.14); }
+
+html[data-theme="dark"] .cd-codeRow[data-range="true"] {
+  background-image: linear-gradient(90deg, rgba(77, 163, 255, 0.12), transparent);
+}
+

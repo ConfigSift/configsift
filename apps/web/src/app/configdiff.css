@@ -1,5 +1,5 @@
 ﻿/* apps/web/src/app/configdiff.css */
-/* ConfigDiff styles */
+/* ConfigDiff styles (cleaned + deduped) */
 
 /* -----------------------------
    Theme variables (for UI components)
@@ -45,6 +45,8 @@ html[data-theme="dark"] {
   --cd-select-option-bg: #0c121b;
   --cd-select-option-text: rgba(232, 238, 249, 0.92);
 }
+
+/* ===== Base ===== */
 
 .cd-page {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
@@ -193,7 +195,7 @@ html[data-theme="dark"] {
   border: 1px solid rgba(53, 56, 83, 0.10);
   border-radius: 18px;
   box-shadow: 0 12px 34px rgba(16, 21, 40, 0.06);
-  padding: 18px 18px;
+  padding: 18px;
 }
 
 .cd-heroRow {
@@ -232,6 +234,130 @@ html[data-theme="dark"] {
   align-items: center;
   gap: 10px;
   margin-left: auto;
+}
+
+/* Hero grid (right-side balance) */
+.cd-heroGrid {
+  display: grid;
+  grid-template-columns: 1.35fr 0.95fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .cd-heroGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cd-heroRight {
+  min-width: 0;
+}
+
+.cd-heroRightCard {
+  border-radius: 18px;
+  border: 1px solid rgba(53, 56, 83, 0.10);
+  background: rgba(255, 255, 255, 0.70);
+  padding: 14px;
+  box-shadow: 0 12px 34px rgba(16, 21, 40, 0.06);
+}
+
+/* Hero features (FINAL consolidated version) */
+.cd-heroFeatures {
+  display: grid;
+  gap: 12px;
+  padding-left: 180px; /* shift right */
+}
+
+
+/* Each feature gets its own subtle surface */
+.cd-featureRow {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 10px;
+  align-items: center;
+
+  /* remove pill look */
+  padding: 10px 6px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+
+  transition: none;
+}
+
+.cd-featureRow:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.cd-featureIcon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+}
+
+.cd-featureTitle {
+  font-weight: 820;
+  letter-spacing: -0.01em;
+}
+
+.cd-featureHint {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.86;
+}
+
+.cd-heroMini {
+  border-radius: 14px;
+  border: 1px solid rgba(53, 56, 83, 0.10);
+  background: rgba(255, 255, 255, 0.55);
+  padding: 10px;
+}
+
+.cd-heroMiniTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cd-heroMiniRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(53, 56, 83, 0.08);
+  background: rgba(248, 249, 251, 0.65);
+  margin-top: 8px;
+}
+
+.cd-miniPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 820;
+  border: 1px solid rgba(53, 56, 83, 0.10);
+}
+
+.cd-miniPill[data-sev="high"] {
+  background: rgba(219, 123, 92, 0.14);
+  border-color: rgba(219, 123, 92, 0.28);
+}
+.cd-miniPill[data-sev="medium"] {
+  background: rgba(240, 179, 91, 0.18);
+  border-color: rgba(240, 179, 91, 0.34);
+}
+.cd-miniPill[data-sev="low"] {
+  background: rgba(70, 179, 122, 0.16);
+  border-color: rgba(70, 179, 122, 0.30);
 }
 
 /* ===== Pills ===== */
@@ -279,7 +405,8 @@ html[data-theme="dark"] {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: background 120ms ease, box-shadow 120ms ease, transform 80ms ease, opacity 120ms ease;
+  transition: background 120ms ease, box-shadow 120ms ease, transform 80ms ease,
+    opacity 120ms ease;
   user-select: none;
   white-space: nowrap;
 }
@@ -375,7 +502,11 @@ html[data-theme="dark"] {
   border-style: dashed;
   border-color: rgba(74, 127, 235, 0.55);
   box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.12);
-  background: linear-gradient(180deg, rgba(74, 127, 235, 0.06) 0%, #f8f9fb 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(74, 127, 235, 0.06) 0%,
+    #f8f9fb 100%
+  );
 }
 
 .cd-textarea {
@@ -463,8 +594,7 @@ html[data-theme="dark"] {
   border-color: rgba(86, 147, 216, 0.32);
 }
 
-/* ===== Toggle (pill button) ===== */
-
+/* Toggle (pill button) */
 .toggle {
   border-radius: 999px;
 }
@@ -555,8 +685,10 @@ html[data-theme="dark"] {
   font-size: 13px;
   line-height: 1.1;
   box-shadow: var(--cd-select-shadow);
-  transition: border-color 160ms ease, transform 160ms ease, background-color 160ms ease;
+  transition: border-color 160ms ease, transform 160ms ease,
+    background-color 160ms ease;
   outline: none;
+
   background-image:
     linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);
@@ -594,8 +726,7 @@ html[data-theme="dark"] {
   color: #121528;
 }
 
-.cd-number:focus,
-.cd-select:focus {
+.cd-number:focus {
   outline: none;
   box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.16);
   border-color: rgba(74, 127, 235, 0.30);
@@ -655,7 +786,8 @@ html[data-theme="dark"] {
   color: #121528;
   cursor: pointer;
   user-select: none;
-  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease,
+    box-shadow 120ms ease, opacity 120ms ease;
   box-shadow: 0 0 0 0 rgba(74, 127, 235, 0);
 }
 
@@ -724,7 +856,7 @@ html[data-theme="dark"] {
   flex-wrap: wrap;
 }
 
-/* ✅ Light mode: tint each badge using its --dot color */
+/* Light mode: tint each badge using its --dot color */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -851,7 +983,7 @@ html[data-theme="dark"] {
 }
 
 /* =====================================
-   Line preview + gutter markers (polish)
+   Line preview + gutter markers (current)
    ===================================== */
 
 .cd-editorFooter {
@@ -951,9 +1083,15 @@ html[data-theme="dark"] {
 }
 
 @keyframes cdFlash {
-  0% { box-shadow: inset 0 0 0 0 rgba(74,127,235,0); }
-  20% { box-shadow: inset 0 0 0 2000px rgba(74,127,235,0.14); }
-  100% { box-shadow: inset 0 0 0 0 rgba(74,127,235,0); }
+  0% {
+    box-shadow: inset 0 0 0 0 rgba(74, 127, 235, 0);
+  }
+  20% {
+    box-shadow: inset 0 0 0 2000px rgba(74, 127, 235, 0.14);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 rgba(74, 127, 235, 0);
+  }
 }
 .cd-lineRow.flash {
   animation: cdFlash 900ms ease;
@@ -1000,9 +1138,15 @@ html[data-theme="dark"] {
   overflow: hidden;
 }
 
-.finding[data-sev="high"] { --sev-accent: rgba(219, 123, 92, 0.85); }
-.finding[data-sev="medium"] { --sev-accent: rgba(240, 179, 91, 0.90); }
-.finding[data-sev="low"] { --sev-accent: rgba(70, 179, 122, 0.90); }
+.finding[data-sev="high"] {
+  --sev-accent: rgba(219, 123, 92, 0.85);
+}
+.finding[data-sev="medium"] {
+  --sev-accent: rgba(240, 179, 91, 0.90);
+}
+.finding[data-sev="low"] {
+  --sev-accent: rgba(70, 179, 122, 0.90);
+}
 
 .finding::before {
   content: "";
@@ -1069,11 +1213,11 @@ html[data-theme="dark"] {
 }
 
 /* ============================
-   Night mode
+   Dark mode
    ============================ */
 
 html[data-theme="dark"] .mutedSm {
-  color: rgba(232,238,249,0.70);
+  color: rgba(232, 238, 249, 0.70);
 }
 
 html[data-theme="dark"] .cd-title,
@@ -1095,25 +1239,47 @@ html[data-theme="dark"] .cd-cardHint,
 html[data-theme="dark"] .cd-tip,
 html[data-theme="dark"] .controlLabel,
 html[data-theme="dark"] .controlHelp {
-  color: rgba(232,238,249,0.70);
+  color: rgba(232, 238, 249, 0.70);
 }
 
 html[data-theme="dark"] .cd-hero {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(231,236,255,0.14);
-  box-shadow: 0 18px 52px rgba(0,0,0,0.45);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.14);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] .cd-heroRightCard {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.14);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] .cd-featureRow {
+  background: transparent;
+  border-color: transparent;
+}
+
+
+html[data-theme="dark"] .cd-heroMini {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(231, 236, 255, 0.12);
+}
+
+html[data-theme="dark"] .cd-heroMiniRow {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(231, 236, 255, 0.10);
 }
 
 html[data-theme="dark"] .pill {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(231,236,255,0.14);
-  color: rgba(232,238,249,0.78);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(231, 236, 255, 0.14);
+  color: rgba(232, 238, 249, 0.78);
 }
 
 html[data-theme="dark"] .cd-seg {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(231,236,255,0.14);
-  box-shadow: 0 14px 40px rgba(0,0,0,0.40);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.14);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.40);
 }
 
 html[data-theme="dark"] .cd-segBtn {
@@ -1121,19 +1287,19 @@ html[data-theme="dark"] .cd-segBtn {
 }
 
 html[data-theme="dark"] .cd-segBtn:hover {
-  background: rgba(77,163,255,0.08);
+  background: rgba(77, 163, 255, 0.08);
 }
 
 html[data-theme="dark"] .cd-segIndicator {
-  background: rgba(77,163,255,0.18);
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.14);
+  background: rgba(77, 163, 255, 0.18);
+  box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.14);
   filter: saturate(1.05);
 }
 
 html[data-theme="dark"] .cd-toolTabs {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(231,236,255,0.14);
-  box-shadow: 0 14px 40px rgba(0,0,0,0.40);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.14);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.40);
 }
 
 html[data-theme="dark"] .cd-tab {
@@ -1141,45 +1307,53 @@ html[data-theme="dark"] .cd-tab {
 }
 
 html[data-theme="dark"] .cd-tab:hover {
-  background: rgba(77,163,255,0.10);
+  background: rgba(77, 163, 255, 0.10);
 }
 
 html[data-theme="dark"] .cd-tab[data-active="true"] {
-  background: rgba(77,163,255,0.18);
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.14);
+  background: rgba(77, 163, 255, 0.18);
+  box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.14);
 }
 
 html[data-theme="dark"] .cd-card {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(231,236,255,0.14);
-  box-shadow: 0 18px 52px rgba(0,0,0,0.45);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(231, 236, 255, 0.14);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.45);
 }
 
 html[data-theme="dark"] .dropZone {
-  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.03) 100%);
-  border-color: rgba(231,236,255,0.12);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  border-color: rgba(231, 236, 255, 0.12);
 }
 
 html[data-theme="dark"] .dropZone[data-active="true"] {
-  border-color: rgba(77,163,255,0.55);
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.14);
-  background: linear-gradient(180deg, rgba(77,163,255,0.10) 0%, rgba(255,255,255,0.03) 100%);
+  border-color: rgba(77, 163, 255, 0.55);
+  box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.14);
+  background: linear-gradient(
+    180deg,
+    rgba(77, 163, 255, 0.10) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
 }
 
 html[data-theme="dark"] .cd-textarea::placeholder,
 html[data-theme="dark"] .cd-input::placeholder {
-  color: rgba(232,238,249,0.45);
+  color: rgba(232, 238, 249, 0.45);
 }
 
 html[data-theme="dark"] .btn {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(231,236,255,0.14);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(231, 236, 255, 0.14);
   color: #E8EEF9;
 }
 
 html[data-theme="dark"] .btn:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(77,163,255,0.28);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(77, 163, 255, 0.28);
 }
 
 html[data-theme="dark"] .btn.primary {
@@ -1194,14 +1368,14 @@ html[data-theme="dark"] .btn.primary:hover {
 }
 
 html[data-theme="dark"] .btn.subtle {
-  background: rgba(77,163,255,0.14);
-  border-color: rgba(77,163,255,0.26);
+  background: rgba(77, 163, 255, 0.14);
+  border-color: rgba(77, 163, 255, 0.26);
   color: #E8EEF9;
 }
 
 html[data-theme="dark"] .btn.subtle:hover {
-  background: rgba(77,163,255,0.20);
-  border-color: rgba(77,163,255,0.34);
+  background: rgba(77, 163, 255, 0.20);
+  border-color: rgba(77, 163, 255, 0.34);
 }
 
 html[data-theme="dark"] .btn.toggle[data-on="true"] {
@@ -1211,40 +1385,40 @@ html[data-theme="dark"] .btn.toggle[data-on="true"] {
 }
 
 html[data-theme="dark"] .btn.toggle[data-on="false"] {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(231,236,255,0.14);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(231, 236, 255, 0.14);
 }
 
 html[data-theme="dark"] .btn.toggle[data-on="false"]:hover {
-  background: rgba(77,163,255,0.10);
-  border-color: rgba(77,163,255,0.22);
+  background: rgba(77, 163, 255, 0.10);
+  border-color: rgba(77, 163, 255, 0.22);
 }
 
 html[data-theme="dark"] .controlRow {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(231,236,255,0.12);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.12);
 }
 
 /* IMPORTANT: use background-color so we don't wipe .cd-select's arrow background-image */
 html[data-theme="dark"] .cd-input,
 html[data-theme="dark"] .cd-select,
 html[data-theme="dark"] .cd-number {
-  background-color: rgba(255,255,255,0.06);
-  border-color: rgba(231,236,255,0.14);
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(231, 236, 255, 0.14);
 }
 
 html[data-theme="dark"] .cd-input:focus,
 html[data-theme="dark"] .cd-select:focus,
 html[data-theme="dark"] .cd-number:focus,
 html[data-theme="dark"] .btn:focus-visible {
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.18);
-  border-color: rgba(77,163,255,0.34);
+  box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.18);
+  border-color: rgba(77, 163, 255, 0.34);
 }
 
-/* ✅ OPTIONAL #3: tint dark badges too (matches light) */
+/* Dark badges: tint too */
 html[data-theme="dark"] .badge {
-  background: color-mix(in srgb, var(--dot) 10%, rgba(255,255,255,0.05));
-  border-color: color-mix(in srgb, var(--dot) 20%, rgba(231,236,255,0.14));
+  background: color-mix(in srgb, var(--dot) 10%, rgba(255, 255, 255, 0.05));
+  border-color: color-mix(in srgb, var(--dot) 20%, rgba(231, 236, 255, 0.14));
   color: #E8EEF9;
 }
 
@@ -1253,27 +1427,31 @@ html[data-theme="dark"] .badge .dot {
 }
 
 html[data-theme="dark"] .rows {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(231,236,255,0.12);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.12);
 }
 
 html[data-theme="dark"] .row {
-  border-top-color: rgba(231,236,255,0.10);
+  border-top-color: rgba(231, 236, 255, 0.10);
 }
 
 html[data-theme="dark"] .row:hover {
-  background: rgba(77,163,255,0.08);
+  background: rgba(77, 163, 255, 0.08);
 }
 
 html[data-theme="dark"] .finding {
-  border-color: rgba(231,236,255,0.14);
-  background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.03) 100%);
+  border-color: rgba(231, 236, 255, 0.14);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
 }
 
 html[data-theme="dark"] .sev {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(231,236,255,0.14);
-  color: rgba(232,238,249,0.90);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(231, 236, 255, 0.14);
+  color: rgba(232, 238, 249, 0.90);
 }
 
 html[data-theme="dark"] .sev-high {
@@ -1292,12 +1470,12 @@ html[data-theme="dark"] .sev-low {
 }
 
 html[data-theme="dark"] .callout {
-  border-color: rgba(231,236,255,0.14);
+  border-color: rgba(231, 236, 255, 0.14);
 }
 
 html[data-theme="dark"] .callout-info {
-  background: rgba(77,163,255,0.10);
-  border-color: rgba(77,163,255,0.22);
+  background: rgba(77, 163, 255, 0.10);
+  border-color: rgba(77, 163, 255, 0.22);
   color: #E8EEF9;
 }
 
@@ -1308,103 +1486,121 @@ html[data-theme="dark"] .callout-danger {
 }
 
 html[data-theme="dark"] .cd-footer {
-  color: rgba(232,238,249,0.65);
+  color: rgba(232, 238, 249, 0.65);
 }
 
-/* ===== Preview box + code gutter (MIN) ===== */
-
-.cd-previewPanel {
-  border-radius: 12px;
-  border: 1px solid rgba(53, 56, 83, 0.10);
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.70);
+/* Dark-mode: stronger Validate severity chips */
+html[data-theme="dark"] .sevChip {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(231, 236, 255, 0.14);
+  color: rgba(232, 238, 249, 0.92);
 }
 
-.cd-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.35;
+html[data-theme="dark"] .sevChip[data-sev="high"] {
+  --chip-bg: rgba(219, 123, 92, 0.20);
+  --chip-border: rgba(219, 123, 92, 0.38);
+  --chip-ring: rgba(219, 123, 92, 0.18);
+  --dot: rgba(219, 123, 92, 0.95);
 }
 
-.cd-codeRow {
-  display: grid;
-  grid-template-columns: 74px 1fr;
-  gap: 10px;
-  padding: 4px 10px;
-  border-top: 1px solid rgba(53, 56, 83, 0.06);
-  align-items: start;
+html[data-theme="dark"] .sevChip[data-sev="medium"] {
+  --chip-bg: rgba(240, 179, 91, 0.20);
+  --chip-border: rgba(240, 179, 91, 0.40);
+  --chip-ring: rgba(240, 179, 91, 0.18);
+  --dot: rgba(240, 179, 91, 0.95);
 }
 
-.cd-codeRow:first-child {
-  border-top: 0;
+html[data-theme="dark"] .sevChip[data-sev="low"] {
+  --chip-bg: rgba(70, 179, 122, 0.18);
+  --chip-border: rgba(70, 179, 122, 0.36);
+  --chip-ring: rgba(70, 179, 122, 0.18);
+  --dot: rgba(70, 179, 122, 0.95);
 }
 
-.cd-codeGutter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  color: rgba(91, 95, 119, 0.85);
-  user-select: none;
+html[data-theme="dark"] .sevChip[data-on="false"] {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(231, 236, 255, 0.12);
+  box-shadow: none;
 }
 
-.cd-codeLineNo {
-  width: 34px;
-  text-align: right;
-  opacity: 0.85;
+/* Dark-mode: line pill (L2 / R2) */
+html[data-theme="dark"] .cd-linePill {
+  background: rgba(77, 163, 255, 0.14);
+  border-color: rgba(77, 163, 255, 0.30);
+  color: rgba(232, 238, 249, 0.92);
 }
 
-.cd-codeMarker {
-  width: 20px;
-  text-align: center;
-  opacity: 0.95;
+html[data-theme="dark"] .cd-linePill:hover {
+  background: rgba(77, 163, 255, 0.20);
+  border-color: rgba(77, 163, 255, 0.38);
 }
 
-.cd-codeText {
-  margin: 0;
-  white-space: pre;
-  overflow-x: auto;
-}
-
-.cd-codeRow[data-sev="high"] {
-  background: rgba(219, 123, 92, 0.10);
-}
-.cd-codeRow[data-sev="medium"],
-.cd-codeRow[data-sev="low"] {
-  background: rgba(240, 179, 91, 0.10);
-}
-
-.cd-codeRow[data-range="true"] {
-  background-image: linear-gradient(90deg, rgba(74, 127, 235, 0.08), transparent);
-}
-
-.cd-codeRowFlash {
-  outline: 2px solid rgba(74, 127, 235, 0.45);
-  outline-offset: -2px;
-  border-radius: 8px;
-}
-
-html[data-theme="dark"] .cd-previewPanel {
+/* Dark-mode: line preview */
+html[data-theme="dark"] .cd-previewBox {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(231, 236, 255, 0.14);
 }
 
-html[data-theme="dark"] .cd-codeRow {
+html[data-theme="dark"] .cd-lineRow {
   border-top-color: rgba(231, 236, 255, 0.10);
 }
 
-html[data-theme="dark"] .cd-codeGutter {
+html[data-theme="dark"] .cd-gutter {
   color: rgba(232, 238, 249, 0.65);
 }
 
-html[data-theme="dark"] .cd-codeRow[data-sev="high"] {
-  background: rgba(219, 123, 92, 0.14);
-}
-html[data-theme="dark"] .cd-codeRow[data-sev="medium"],
-html[data-theme="dark"] .cd-codeRow[data-sev="low"] {
-  background: rgba(240, 179, 91, 0.14);
+html[data-theme="dark"] .cd-ln {
+  color: rgba(232, 238, 249, 0.58);
+  opacity: 1;
 }
 
-html[data-theme="dark"] .cd-codeRow[data-range="true"] {
-  background-image: linear-gradient(90deg, rgba(77, 163, 255, 0.12), transparent);
+html[data-theme="dark"] .cd-lineText {
+  color: rgba(232, 238, 249, 0.92);
+}
+
+html[data-theme="dark"] .cd-lineRow[data-hit="true"] {
+  background: rgba(77, 163, 255, 0.10);
+}
+
+html[data-theme="dark"] .cd-gutterMark {
+  box-shadow: 0 0 0 4px rgba(77, 163, 255, 0.12);
+}
+
+/* ============================
+   Hero right: remove outer "cover pill"
+   + bigger icons
+   + thinner feature pills
+   ============================ */
+
+/* Remove the wrapper card look (the big pill behind the 3 items) */
+.cd-heroRightCard {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* Keep dark mode consistent (in case earlier rules re-apply) */
+html[data-theme="dark"] .cd-heroRightCard {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Make the 3 feature pills thinner */
+.cd-featureRow {
+  padding: 4px 14px;      /* was 14px 16px */
+  border-radius: 14px;     /* keep consistent */
+}
+
+/* Make the icons bigger */
+.cd-featureIcon {
+  width: 44px;             /* was 32px */
+  height: 44px;            /* was 32px */
+}
+
+/* If you want spacing to still feel balanced with bigger icons */
+.cd-featureRow {
+  grid-template-columns: 54px 1fr; /* was 40px 1fr */
 }

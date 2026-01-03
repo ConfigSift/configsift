@@ -1040,84 +1040,124 @@ export default function Home() {
         </header>
 
         {/* Hero */}
-        <section className="cd-hero" style={{ position: "relative", zIndex: 2, marginBottom: 14 }}>
-          <div className="cd-heroRow">
-            <div>
-              <h2 className="cd-heroTitle">Catch risky config differences before they break production</h2>
+		<section className="cd-hero" style={{ position: "relative", zIndex: 2, marginBottom: 14 }}>
+		  <div className="cd-heroGrid">
+			{/* LEFT */}
+			<div>
+			  <h2 className="cd-heroTitle">Catch risky config differences before they break production</h2>
 
-              <div className="cd-heroTagline">
-                Compare{" "}
-                <code
-                  style={{
-                    padding: "1px 6px",
-                    borderRadius: 8,
-                    background: THEME.card2,
-                    border: `1px solid ${THEME.borderSoft}`,
-                  }}
-                >
-                  .env
-                </code>
-                ,{" "}
-                <code
-                  style={{
-                    padding: "1px 6px",
-                    borderRadius: 8,
-                    background: THEME.card2,
-                    border: `1px solid ${THEME.borderSoft}`,
-                  }}
-                >
-                  JSON
-                </code>
-                , and{" "}
-                <code
-                  style={{
-                    padding: "1px 6px",
-                    borderRadius: 8,
-                    background: THEME.card2,
-                    border: `1px solid ${THEME.borderSoft}`,
-                  }}
-                >
-                  YAML
-                </code>{" "}
-                configs side-by-side.
-                <br />
-                Detect missing keys, leaked secrets, and unsafe values — <strong>100% in your browser</strong>.
-              </div>
+			  <div className="cd-heroTagline">
+				Compare{" "}
+				<code
+				  style={{
+					padding: "1px 6px",
+					borderRadius: 8,
+					background: THEME.card2,
+					border: `1px solid ${THEME.borderSoft}`,
+				  }}
+				>
+				  .env
+				</code>
+				,{" "}
+				<code
+				  style={{
+					padding: "1px 6px",
+					borderRadius: 8,
+					background: THEME.card2,
+					border: `1px solid ${THEME.borderSoft}`,
+				  }}
+				>
+				  JSON
+				</code>
+				, and{" "}
+				<code
+				  style={{
+					padding: "1px 6px",
+					borderRadius: 8,
+					background: THEME.card2,
+					border: `1px solid ${THEME.borderSoft}`,
+				  }}
+				>
+				  YAML
+				</code>{" "}
+				configs side-by-side.
+				<br />
+				Detect missing keys, leaked secrets, and unsafe values — <strong>100% in your browser</strong>.
+			  </div>
 
-              <div className="mutedSm" style={{ marginTop: 8, opacity: 0.9 }}>
-                🔒 No servers • No uploads • No logs
-              </div>
+			  <div className="mutedSm" style={{ marginTop: 8, opacity: 0.9 }}>
+				🔒 No servers • No uploads • No logs
+			  </div>
 
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-                <ActionButton variant="primary" onClick={loadSample} title="Load a small sample config for this format">
-                  Load sample configs
-                </ActionButton>
+			  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+				<ActionButton variant="primary" onClick={loadSample} title="Load a small sample config for this format">
+				  Load sample configs
+				</ActionButton>
 
-                <span className="mutedSm" style={{ opacity: 0.9 }}>
-                  or paste/upload your own below
-                </span>
-              </div>
+				<span className="mutedSm" style={{ opacity: 0.9 }}>
+				  or paste/upload your own below
+				</span>
+			  </div>
 
-              {/* ✅ Step 2: one-time onboarding hint */}
-              {showFirstHint && (
-                <div className="callout callout-info" style={{ marginTop: 10, maxWidth: 520 }}>
-                  <strong>New here?</strong> Load sample configs to instantly see how ConfigSift detects risky differences —
-                  nothing is uploaded.
-                </div>
-              )}
+			  {/* One-time onboarding hint */}
+			  {showFirstHint && (
+				<div className="callout callout-info" style={{ marginTop: 10, maxWidth: 520 }}>
+				  <strong>New here?</strong> Load sample configs to instantly see how ConfigSift detects risky differences — nothing
+				  is uploaded.
+				</div>
+			  )}
 
-              <div className="mutedSm" style={{ marginTop: 8, opacity: 0.9 }}>
-                Paste two configs → Compare → Fix risky differences
-              </div>
+			  <div className="mutedSm" style={{ marginTop: 8, opacity: 0.9 }}>
+				Paste two configs → Compare → Fix risky differences
+			  </div>
+			</div>
 
-              <div className="cd-heroPills" style={{ marginTop: 12 }}>
-                <span className="pill">🔐 Secret detection</span>
-                <span className="pill">⚠ Deployment safety</span>
-                <span className="pill">⚡ Instant diff</span>
-              </div>
-            </div>
-          </div>
-        </section>
+			{/* RIGHT */}
+			<div className="cd-heroRight">
+			  <div className="cd-heroRightCard heroRightClean">
+			  <div className="cd-heroFeatures heroFeaturesClean">
+				<div className="cd-featureRow heroFeatureClean">
+				  <img
+					className="cd-featureIcon heroFeatureIcon"
+					src="/hero/secret.png"
+					alt="Secret detection"
+				  />
+				  <div>
+					<div className="cd-featureTitle">Secret detection</div>
+					<div className="cd-featureHint">Flags tokens & credentials</div>
+				  </div>
+				</div>
+
+				<div className="cd-featureRow heroFeatureClean">
+				  <img
+					className="cd-featureIcon heroFeatureIcon"
+					src="/hero/deploy.png"
+					alt="Deployment safety"
+				  />
+				  <div>
+					<div className="cd-featureTitle">Deployment safety</div>
+					<div className="cd-featureHint">Catches dev-only values</div>
+				  </div>
+				</div>
+
+				<div className="cd-featureRow heroFeatureClean">
+				  <img
+					className="cd-featureIcon heroFeatureIcon"
+					src="/hero/diff.png"
+					alt="Instant diff"
+				  />
+				  <div>
+					<div className="cd-featureTitle">Instant diff</div>
+					<div className="cd-featureHint">Missing & unsafe changes</div>
+				  </div>
+				</div>
+			  </div>
+			</div>
+
+			</div>
+		  </div>
+		</section>
+
 
         {/* Tool tabs + format selector (right) */}
         <nav

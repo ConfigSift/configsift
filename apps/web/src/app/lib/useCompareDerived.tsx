@@ -151,9 +151,7 @@ export function useCompareDerived(args: {
     return copy;
   };
 
-  const { filteredAll, rendered, uiMs, findingCountsUI, findingCountsAll } = useMemo(() => {
-    const t0 = performance.now();
-
+  const { filteredAll, rendered, findingCountsUI, findingCountsAll } = useMemo(() => {
     const empty = {
       changedFiltered: [] as any[],
       addedFiltered: [] as any[],
@@ -165,22 +163,18 @@ export function useCompareDerived(args: {
     const emptyCountsAll: FindingCountsAll = { critical: 0, suggestions: 0, total: 0 };
 
     if (compareBlank) {
-      const t1 = performance.now();
       return {
         filteredAll: empty,
         rendered: empty,
-        uiMs: +(t1 - t0).toFixed(1),
         findingCountsUI: emptyCountsUI,
         findingCountsAll: emptyCountsAll,
       };
     }
 
     if ("error" in result) {
-      const t1 = performance.now();
       return {
         filteredAll: empty,
         rendered: empty,
-        uiMs: +(t1 - t0).toFixed(1),
         findingCountsUI: emptyCountsUI,
         findingCountsAll: emptyCountsAll,
       };
@@ -240,8 +234,7 @@ export function useCompareDerived(args: {
       findingsFiltered: applyLimit(findingsFiltered),
     };
 
-    const t1 = performance.now();
-    return { filteredAll, rendered, uiMs: +(t1 - t0).toFixed(1), findingCountsUI, findingCountsAll: countsAll };
+    return { filteredAll, rendered, findingCountsUI, findingCountsAll: countsAll };
   }, [compareBlank, result, q, sevHigh, sevMed, sevLow, secretsOnly, maskValues, rowLimit, sortMode]);
 
   const filtersHint = useMemo(() => {
@@ -276,7 +269,6 @@ export function useCompareDerived(args: {
   return {
     filteredAll,
     rendered,
-    uiMs,
     findingCountsUI,
     findingCountsAll,
     filtersHint,

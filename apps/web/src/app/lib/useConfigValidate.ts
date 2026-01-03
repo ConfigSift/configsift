@@ -27,6 +27,12 @@ type Payload = {
   yamlStrict: boolean;
 };
 
+const EMPTY_RESULT = {
+  left: { ok: true, issues: [] as any[] },
+  right: { ok: true, issues: [] as any[] },
+  totals: { high: 0, medium: 0, low: 0 },
+};
+
 export function useConfigValidate(
   left: string,
   right: string,
@@ -36,7 +42,10 @@ export function useConfigValidate(
     format?: FormatId;
     enabled?: boolean; // when true, auto-validate on (debounced) edits
     yamlStrict?: boolean; // YAML only: duplicates are errors
-    debug?: boolean; // ✅ NEW: logs worker req/res to console
+    debug?: boolean; // logs worker req/res to console
+
+    // ✅ NEW: clear stale findings automatically when both inputs are empty
+    clearOnEmpty?: boolean;
   }
 ) {
   const debounceMs = opts?.debounceMs ?? 250;
@@ -46,11 +55,14 @@ export function useConfigValidate(
   const yamlStrict = opts?.yamlStrict ?? false;
   const debug = opts?.debug ?? false;
 
+  // ✅ NEW
+  const clearOnEmpty = opts?.clearOnEmpty ?? true;
+
   // Keep "stable" copies for debounced auto-validation.
   const [leftStable, setLeftStable] = useState(left);
   const [rightStable, setRightStable] = useState(right);
 
-  // ✅ NEW: keep stable values in sync even when enabled=false
+  // Keep stable values in sync even when enabled=false
   // (no auto-validate will run, but if you later enable it, stables are current)
   useEffect(() => {
     if (!enabled) {
@@ -75,17 +87,37 @@ export function useConfigValidate(
   const latestHandledRef = useRef(0);
 
   const [engineMs, setEngineMs] = useState<number | null>(null);
-  const [result, setResult] = useState<any>({
-    left: { ok: true, issues: [] },
-    right: { ok: true, issues: [] },
-    totals: { high: 0, medium: 0, low: 0 },
-  });
+  const [result, setResult] = useState<any>(EMPTY_RESULT);
   const [status, setStatus] = useState<Status>("Idle");
 
   const [hasRun, setHasRun] = useState(false);
   const [lastValidatedAt, setLastValidatedAt] = useState<number | null>(null);
 
   const lastSentRef = useRef<Payload | null>(null);
+
+  // ✅ NEW: helper to reset local state (and ignore any in-flight worker responses)
+  const reset = useCallback(() => {
+    // Bump ids so any late worker message is ignored
+    const next = requestIdRef.current + 1;
+    requestIdRef.current = next;
+    latestHandledRef.current = next;
+
+    lastSentRef.current = null;
+
+    setStatus("Idle");
+    setEngineMs(null);
+    setHasRun(false);
+    setLastValidatedAt(null);
+    setResult(EMPTY_RESULT);
+  }, []);
+
+  // ✅ NEW: clear stale findings when both inputs are empty
+  useEffect(() => {
+    if (!clearOnEmpty) return;
+    if (left.trim() === "" && right.trim() === "") {
+      reset();
+    }
+  }, [left, right, clearOnEmpty, reset]);
 
   const post = useCallback(
     (payload: Payload, force?: boolean) => {
@@ -133,8 +165,13 @@ export function useConfigValidate(
 
   // Manual trigger: validate exactly the current hook inputs.
   const run = useCallback(() => {
+    // If the user runs validate with empty inputs, just reset to empty state.
+    if (clearOnEmpty && left.trim() === "" && right.trim() === "") {
+      reset();
+      return;
+    }
     post({ left, right, format, profile, yamlStrict }, true);
-  }, [left, right, format, profile, yamlStrict, post]);
+  }, [left, right, format, profile, yamlStrict, post, clearOnEmpty, reset]);
 
   useEffect(() => {
     const w = new Worker(new URL("../validate.worker.ts", import.meta.url), { type: "module" });
@@ -175,8 +212,15 @@ export function useConfigValidate(
   // Auto validate (debounced) when enabled=true.
   useEffect(() => {
     if (!enabled) return;
-    post({ left: leftStable, right: rightStable, format, profile, yamlStrict }, false);
-  }, [leftStable, rightStable, format, profile, yamlStrict, enabled, post]);
 
-  return { result, engineMs, status, run, hasRun, lastValidatedAt };
+    // ✅ If auto-validation is enabled and both sides are empty, keep it clean.
+    if (clearOnEmpty && leftStable.trim() === "" && rightStable.trim() === "") {
+      reset();
+      return;
+    }
+
+    post({ left: leftStable, right: rightStable, format, profile, yamlStrict }, false);
+  }, [leftStable, rightStable, format, profile, yamlStrict, enabled, post, clearOnEmpty, reset]);
+
+  return { result, engineMs, status, run, hasRun, lastValidatedAt, reset };
 }

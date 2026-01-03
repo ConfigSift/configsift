@@ -4,12 +4,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { normSeverity } from "./lib/configdiff";
 import { useConfigDiffCompare } from "./lib/useConfigDiffCompare";
 import { useConfigValidate } from "./lib/useConfigValidate";
-import { decodeShareState, encodeShareState, ShareStateV1, EnvProfileId, FormatId } from "./lib/shareState";
+import type { ShareStateV1, EnvProfileId, FormatId } from "./lib/shareState";
 
+import { ValidatePanel } from "./_components/ValidatePanel";
 import { ActionButton } from "./_components/configdiff-ui";
 import { ConfigEditors } from "./_components/ConfigEditors";
-import { ValidatePanel } from "./_components/ValidatePanel";
-import { ComparePanel } from "./_components/ComparePanel";
+import { ComparePanel, CompareSummaryBar } from "./_components/ComparePanel";
 
 import { useThemeMode } from "./lib/useThemeMode";
 import { useEditorIO } from "./lib/useEditorIO";
@@ -32,7 +32,9 @@ type LineAnnotation = {
 };
 
 const LS_KEY = "configsift:draft:v1";
-const MAX_SHARE_URL_LEN = 1900;
+
+// ✅ Step 2: one-time onboarding hint
+const LS_ONBOARDING_KEY = "configsift:onboarded:v1";
 
 const SAMPLE_LEFT_ENV = `# Example prod
 DATABASE_URL=postgres://prod
@@ -72,18 +74,6 @@ const SAMPLE_RIGHT_YAML = `db:
 debug: true
 newFlag: 1
 `;
-
-function timeAgo(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 5) return "just now";
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
 
 /** Try hard to extract `line X` or `line X-Y` from any issue object/message. */
 function extractLineRange(issue: any): { lineStart?: number; lineEnd?: number } {
@@ -315,9 +305,37 @@ export default function Home() {
   // theme (moved to hook)
   const { themeMode, setThemeMode, THEME, segValue } = useThemeMode();
 
+  // ✅ Step 2: one-time onboarding hint
+  const [showFirstHint, setShowFirstHint] = useState(false);
+
   const leftInputRef = useRef<HTMLInputElement | null>(null);
   const rightInputRef = useRef<HTMLInputElement | null>(null);
   const shareImportRef = useRef<HTMLInputElement | null>(null);
+
+  // ✅ NEW: anchor to scroll to editors (Compare + Validate)
+  const editorsRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ NEW: scroll helper (smooth scroll + best-effort focus)
+  const scrollToEditors = (opts?: { focus?: "left" | "right" }) => {
+    const el = editorsRef.current;
+    if (!el) return;
+
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    const focusSide = opts?.focus;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const root = editorsRef.current;
+        if (!root) return;
+
+        const textareas = Array.from(root.querySelectorAll("textarea")) as HTMLTextAreaElement[];
+        if (!textareas.length) return;
+
+        if (focusSide === "right" && textareas[1]) textareas[1].focus();
+        else textareas[0]?.focus();
+      });
+    });
+  };
 
   // editor IO (moved to hook)
   const { pasteErr, dragOver, pasteFromClipboard, readFile, onPickFile, onDrop, onDragOver, onDragLeave } = useEditorIO({
@@ -325,12 +343,29 @@ export default function Home() {
     setRightDraft,
   });
 
-  const draftBlank = leftDraft.trim().length === 0 && rightDraft.trim().length === 0;
   const draftReady = leftDraft.trim().length > 0 && rightDraft.trim().length > 0;
   const compareBlank = left.trim().length === 0 && right.trim().length === 0;
   const hasCompared = !compareBlank;
 
   const hasAnyDraft = leftDraft.trim().length > 0 || rightDraft.trim().length > 0;
+
+  // ✅ Step 2: show hint only if not onboarded yet
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const seen = localStorage.getItem(LS_ONBOARDING_KEY);
+    if (!seen) setShowFirstHint(true);
+  }, []);
+
+  // ✅ Step 2: once user has any draft, mark onboarded + hide hint
+  useEffect(() => {
+    if (!showFirstHint) return;
+    if (leftDraft.trim() || rightDraft.trim()) {
+      try {
+        localStorage.setItem(LS_ONBOARDING_KEY, "1");
+      } catch {}
+      setShowFirstHint(false);
+    }
+  }, [leftDraft, rightDraft, showFirstHint]);
 
   // Validate severity filters (default ON)
   const [vSevHigh, setVSevHigh] = useState(true);
@@ -348,7 +383,7 @@ export default function Home() {
     return true;
   };
 
-  const { result, engineMs, status } = useConfigDiffCompare(left, right, {
+  const { result, status } = useConfigDiffCompare(left, right, {
     debounceMs: 300,
     profile: envProfile,
     format,
@@ -404,13 +439,11 @@ export default function Home() {
   const [sortMode, setSortMode] = useState<SortMode>("none");
 
   const [shareMsg, setShareMsg] = useState<string | null>(null);
-  const [shareBusy, setShareBusy] = useState(false);
 
   // derived compare logic (moved to hook)
   const {
     filteredAll,
     rendered,
-    uiMs,
     findingCountsUI,
     findingCountsAll,
     filtersHint,
@@ -453,7 +486,6 @@ export default function Home() {
 
     return {
       generatedAt,
-      perf: { engineMs, uiMs },
       format,
       profile: envProfile,
       filters: {
@@ -493,13 +525,13 @@ export default function Home() {
     lines.push(`Generated: ${report.generatedAt}`);
     lines.push(`Format: ${report.format ?? "env"}`);
     if (report.format === "env") lines.push(`Parsing: ${report.profile ?? "dotenv"}`);
-    lines.push(`UI time: ${report.perf.uiMs ?? "?"} ms`);
-    lines.push(`Engine time: ${report.perf.engineMs ?? "?"} ms`);
     lines.push("");
 
     lines.push(`## Filters`);
     lines.push(`- Query: \`${report.filters.query ?? ""}\``);
-    lines.push(`- Privacy: maskValues=${report.filters.privacy.maskValues}, secretsOnly=${report.filters.privacy.secretsOnly}`);
+    lines.push(
+      `- Privacy: maskValues=${report.filters.privacy.maskValues}, secretsOnly=${report.filters.privacy.secretsOnly}`
+    );
     lines.push(`- Render: rowLimit=${report.filters.render.rowLimit}`);
     lines.push(`- Sort: sortMode=${report.filters.sort.sortMode}`);
     lines.push("");
@@ -619,7 +651,6 @@ export default function Home() {
 
       applyShareState(share, { commit: true });
       setShareMsg("Imported Share JSON.");
-      window.location.hash = "";
     } catch (e: any) {
       setShareMsg(e?.message ?? "Failed to import Share JSON.");
     } finally {
@@ -641,49 +672,11 @@ export default function Home() {
     if (!ok) alert("Copy failed (clipboard permissions).");
   };
 
-  const copyShareLink = async () => {
-    setShareMsg(null);
-    setShareBusy(true);
-
-    try {
-      const token = await encodeShareState(buildShareState());
-      const url = `${window.location.origin}${window.location.pathname}#s=${token}`;
-
-      if (url.length > MAX_SHARE_URL_LEN) {
-        downloadShareJSON();
-        setShareMsg("Share link too large → downloaded snapshot JSON instead (importable).");
-        return;
-      }
-
-      window.location.hash = `s=${token}`;
-
-      const ok = await copyText(url);
-      setShareMsg(ok ? "Share link copied to clipboard." : "Could not copy link (clipboard permission).");
-    } catch (e: any) {
-      setShareMsg(e?.message ?? "Failed to create share link.");
-    } finally {
-      setShareBusy(false);
-    }
-  };
-
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const run = async () => {
       if (typeof window === "undefined") return;
-
-      const hash = window.location.hash?.replace(/^#/, "") ?? "";
-      const params = new URLSearchParams(hash);
-      const token = params.get("s");
-      if (token) {
-        const decoded = await decodeShareState(token);
-        if (decoded) {
-          applyShareState(decoded, { commit: true });
-          setShareMsg("Loaded from share link.");
-          setHydrated(true);
-          return;
-        }
-      }
 
       try {
         const raw = localStorage.getItem(LS_KEY);
@@ -752,6 +745,15 @@ export default function Home() {
     setLeft(l);
     setRight(r);
     setShareMsg(null);
+
+    // ✅ Step 2: mark onboarded + hide hint
+    try {
+      localStorage.setItem(LS_ONBOARDING_KEY, "1");
+    } catch {}
+    setShowFirstHint(false);
+
+    // ✅ jump down to the editors after loading samples
+    scrollToEditors({ focus: "left" });
   };
 
   const runCompare = () => {
@@ -770,19 +772,13 @@ export default function Home() {
     }
   }, [showFindings]);
 
-  const statusTone =
-    status === "Idle"
-      ? { bg: THEME.blueSoft, border: THEME.borderSoft }
-      : { bg: THEME.blueSoft2, border: THEME.borderSoft };
-
-  const shareVariant = hasCompared ? "primary" : "subtle";
   const compareLabel = format === "json" ? "Compare JSON" : format === "yaml" ? "Compare YAML" : "Compare Environments";
 
   const TOOL_TABS: Array<{ id: ToolId; label: string; supported: (fmt: FormatId) => boolean; implemented: boolean }> = [
     { id: "compare", label: "Compare", supported: () => true, implemented: true },
+    { id: "validate", label: "Validate", supported: () => true, implemented: true },
     { id: "format", label: "Format", supported: (f) => f === "json", implemented: false },
     { id: "minify", label: "Minify", supported: (f) => f === "json", implemented: false },
-    { id: "validate", label: "Validate", supported: () => true, implemented: true },
     { id: "bundle", label: "Bundle", supported: () => true, implemented: false },
   ];
 
@@ -806,16 +802,25 @@ export default function Home() {
     setShowFindings(false);
   };
 
-  // -----------------------------
-  // ✅ Validate (filtered) helpers
-  // -----------------------------
-  const validateObj: any = validateResult as any;
-  const hasValidateError = !!(validateObj && typeof validateObj === "object" && "error" in validateObj && validateObj.error);
+	// -----------------------------
+	// ✅ Validate (filtered) helpers
+	// -----------------------------
+	// IMPORTANT: useConfigValidate is manual-run (enabled:false), so results can be "stale" after clearing.
+	// Gate the displayed validate result by hasAnyDraft so findings clear immediately when inputs clear.
+	const validateObj: any = hasAnyDraft ? (validateResult as any) : null;
 
-  const validateTotals = validateObj?.totals ?? { high: 0, medium: 0, low: 0 };
+	const hasValidateError = !!(
+	  validateObj &&
+	  typeof validateObj === "object" &&
+	  "error" in validateObj &&
+	  validateObj.error
+	);
 
-  const leftIssuesAllRaw: any[] = Array.isArray(validateObj?.left?.issues) ? validateObj.left.issues : [];
-  const rightIssuesAllRaw: any[] = Array.isArray(validateObj?.right?.issues) ? validateObj.right.issues : [];
+	const validateTotals = validateObj?.totals ?? { high: 0, medium: 0, low: 0 };
+
+	const leftIssuesAllRaw: any[] = Array.isArray(validateObj?.left?.issues) ? validateObj.left.issues : [];
+	const rightIssuesAllRaw: any[] = Array.isArray(validateObj?.right?.issues) ? validateObj.right.issues : [];
+
 
   // ✅ Enrich issues with resolved lineStart/lineEnd (so Env 1 also gets L## + click)
   const leftIssuesAll: any[] = useMemo(() => {
@@ -854,7 +859,8 @@ export default function Home() {
     return leftIssuesAll
       .map((it: any) => {
         const sev = normSeverity(it?.severity) as any;
-        const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+        const s: "high" | "medium" | "low" | "info" =
+          sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
 
         const lineStart = typeof it?.__lineStart === "number" ? it.__lineStart : extractLineRange(it).lineStart;
         const lineEnd = typeof it?.__lineEnd === "number" ? it.__lineEnd : extractLineRange(it).lineEnd;
@@ -870,7 +876,8 @@ export default function Home() {
     return rightIssuesAll
       .map((it: any) => {
         const sev = normSeverity(it?.severity) as any;
-        const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+        const s: "high" | "medium" | "low" | "info" =
+          sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
 
         const lineStart = typeof it?.__lineStart === "number" ? it.__lineStart : extractLineRange(it).lineStart;
         const lineEnd = typeof it?.__lineEnd === "number" ? it.__lineEnd : extractLineRange(it).lineEnd;
@@ -912,7 +919,8 @@ export default function Home() {
       const line = hint?.leftLine;
       if (!line) continue;
       const sev = normSeverity(f?.severity) as any;
-      const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+      const s: "high" | "medium" | "low" | "info" =
+        sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
       out.push({ lineStart: line, lineEnd: line, severity: s, label: String(f?.key ?? "Finding") });
     }
     return out;
@@ -930,7 +938,8 @@ export default function Home() {
       const line = hint?.rightLine;
       if (!line) continue;
       const sev = normSeverity(f?.severity) as any;
-      const s: "high" | "medium" | "low" | "info" = sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
+      const s: "high" | "medium" | "low" | "info" =
+        sev === "high" || sev === "medium" || sev === "low" ? sev : "info";
       out.push({ lineStart: line, lineEnd: line, severity: s, label: String(f?.key ?? "Finding") });
     }
     return out;
@@ -945,6 +954,17 @@ export default function Home() {
       setRight("");
     }
   };
+
+  // Lightweight status helpers (don’t assume exact enum)
+  const validateRunning =
+    String(validateStatus ?? "").toLowerCase().includes("run") ||
+    String(validateStatus ?? "").toLowerCase().includes("validat") ||
+    String(validateStatus ?? "").toLowerCase().includes("work");
+
+  const compareRunning =
+    String(status ?? "").toLowerCase() !== "idle" &&
+    String(status ?? "").toLowerCase() !== "done" &&
+    String(status ?? "").toLowerCase() !== "error";
 
   return (
     <main
@@ -968,7 +988,7 @@ export default function Home() {
             />
             <div>
               <h1 className="cd-title">ConfigSift</h1>
-              <div className="cd-subtitle">Compare .env / JSON / YAML configs in your browser — nothing is uploaded.</div>
+              <div className="cd-subtitle">Browser-only config diff • No uploads</div>
             </div>
           </div>
 
@@ -1016,35 +1036,6 @@ export default function Home() {
                 </button>
               </div>
             </div>
-
-            {draftBlank ? (
-              <ActionButton variant="subtle" onClick={loadSample} title="Load a small sample config for this format">
-                Load sample
-              </ActionButton>
-            ) : null}
-
-            <ActionButton
-              variant={shareVariant as any}
-              onClick={copyShareLink}
-              title="Create a shareable link (falls back to snapshot JSON if too large)"
-              disabled={shareBusy as any}
-            >
-              {shareBusy ? "Sharing…" : "Share link"}
-            </ActionButton>
-
-            <span
-              className="pill"
-              style={{ background: statusTone.bg, borderColor: statusTone.border, color: THEME.text }}
-              title="Debounced + worker compare status"
-            >
-              {status === "Idle" ? "Ready" : "Comparing…"}
-            </span>
-
-            {process.env.NODE_ENV !== "production" && hydrated && (
-              <span className="pill" title="Performance (UI + worker)">
-                UI {uiMs}ms · Engine {engineMs ?? "…"}ms
-              </span>
-            )}
           </div>
         </header>
 
@@ -1052,168 +1043,145 @@ export default function Home() {
         <section className="cd-hero" style={{ position: "relative", zIndex: 2, marginBottom: 14 }}>
           <div className="cd-heroRow">
             <div>
-              <h2 className="cd-heroTitle">Compare configs instantly</h2>
+              <h2 className="cd-heroTitle">Catch risky config differences before they break production</h2>
+
               <div className="cd-heroTagline">
-                Spot missing keys, risky secrets, and unsafe URLs before they hit production — all locally in your browser.
-              </div>
-
-              <div className="cd-heroPills">
-                <span className="pill">⚡ Instant diff</span>
-                <span className="pill">🔒 Secret detection</span>
-                <span className="pill">🚦 Deployment safety</span>
-              </div>
-            </div>
-
-            <div className="cd-heroCta">
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="mutedSm" style={{ opacity: 0.9 }}>
-                  Format
-                </span>
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value as FormatId)}
-                  className="cd-select"
-                  title="Choose config format"
-                  style={{ height: 34 }}
+                Compare{" "}
+                <code
+                  style={{
+                    padding: "1px 6px",
+                    borderRadius: 8,
+                    background: THEME.card2,
+                    border: `1px solid ${THEME.borderSoft}`,
+                  }}
                 >
-                  <option value="env">.env</option>
-                  <option value="json">JSON</option>
-                  <option value="yaml">YAML</option>
-                </select>
+                  .env
+                </code>
+                ,{" "}
+                <code
+                  style={{
+                    padding: "1px 6px",
+                    borderRadius: 8,
+                    background: THEME.card2,
+                    border: `1px solid ${THEME.borderSoft}`,
+                  }}
+                >
+                  JSON
+                </code>
+                , and{" "}
+                <code
+                  style={{
+                    padding: "1px 6px",
+                    borderRadius: 8,
+                    background: THEME.card2,
+                    border: `1px solid ${THEME.borderSoft}`,
+                  }}
+                >
+                  YAML
+                </code>{" "}
+                configs side-by-side.
+                <br />
+                Detect missing keys, leaked secrets, and unsafe values — <strong>100% in your browser</strong>.
               </div>
 
-              <ActionButton
-                variant="primary"
-                onClick={() => {
-                  setTool("compare");
-                  runCompare();
-                }}
-                disabled={!draftReady as any}
-                title={draftReady ? "Run comparison" : "Paste/upload both configs to enable compare"}
-              >
-                {compareLabel}
-              </ActionButton>
+              <div className="mutedSm" style={{ marginTop: 8, opacity: 0.9 }}>
+                🔒 No servers • No uploads • No logs
+              </div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+                <ActionButton variant="primary" onClick={loadSample} title="Load a small sample config for this format">
+                  Load sample configs
+                </ActionButton>
+
+                <span className="mutedSm" style={{ opacity: 0.9 }}>
+                  or paste/upload your own below
+                </span>
+              </div>
+
+              {/* ✅ Step 2: one-time onboarding hint */}
+              {showFirstHint && (
+                <div className="callout callout-info" style={{ marginTop: 10, maxWidth: 520 }}>
+                  <strong>New here?</strong> Load sample configs to instantly see how ConfigSift detects risky differences —
+                  nothing is uploaded.
+                </div>
+              )}
+
+              <div className="mutedSm" style={{ marginTop: 8, opacity: 0.9 }}>
+                Paste two configs → Compare → Fix risky differences
+              </div>
+
+              <div className="cd-heroPills" style={{ marginTop: 12 }}>
+                <span className="pill">🔐 Secret detection</span>
+                <span className="pill">⚠ Deployment safety</span>
+                <span className="pill">⚡ Instant diff</span>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Tool tabs */}
-        <nav className="cd-toolTabs" aria-label="Workspace tools" style={{ position: "relative", zIndex: 1 }}>
-          {TOOL_TABS.map((t) => {
-            const st = tabState(t);
-            const active = tool === t.id;
+        {/* Tool tabs + format selector (right) */}
+        <nav
+          className="cd-toolTabs"
+          aria-label="Workspace tools"
+          style={{
+            position: "relative",
+            zIndex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+          }}
+        >
+          {/* Left: tabs */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {TOOL_TABS.map((t) => {
+              const st = tabState(t);
+              const active = tool === t.id;
 
-            return (
-              <button
-                key={t.id}
-                type="button"
-                className="cd-tab"
-                data-active={active ? "true" : "false"}
-                aria-current={active ? "page" : undefined}
-                aria-disabled={st.disabled ? "true" : "false"}
-                disabled={st.disabled}
-                title={st.title}
-                onClick={() => {
-                  if (st.disabled) return;
-                  setTool(t.id);
-                }}
-              >
-                {t.label}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="cd-tab"
+                  data-active={active ? "true" : "false"}
+                  aria-current={active ? "page" : undefined}
+                  aria-disabled={st.disabled ? "true" : "false"}
+                  disabled={st.disabled}
+                  title={st.title}
+                  onClick={() => {
+                    if (st.disabled) return;
+                    setTool(t.id);
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right: format selector */}
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="mutedSm" style={{ opacity: 0.9 }}>
+              Format
+            </span>
+            <select
+              value={format}
+              onChange={(e) => setFormat(e.target.value as FormatId)}
+              className="cd-select"
+              title="Choose config format"
+              style={{ height: 34 }}
+            >
+              <option value="env">.env</option>
+              <option value="json">JSON</option>
+              <option value="yaml">YAML</option>
+            </select>
+          </div>
         </nav>
 
-        {/* Hidden inputs */}
-        <input
-          ref={leftInputRef}
-          type="file"
-          accept=".env,.txt,.json,.yml,.yaml,application/json,text/yaml,application/x-yaml,*/*"
-          style={{ display: "none" }}
-          onChange={(e) => onPickFile("left", e.target.files?.[0])}
-        />
-        <input
-          ref={rightInputRef}
-          type="file"
-          accept=".env,.txt,.json,.yml,.yaml,application/json,text/yaml,application/x-yaml,*/*"
-          style={{ display: "none" }}
-          onChange={(e) => onPickFile("right", e.target.files?.[0])}
-        />
-        <input
-          ref={shareImportRef}
-          type="file"
-          accept=".json,application/json"
-          style={{ display: "none" }}
-          onChange={(e) => onImportShareJSON(e.target.files?.[0])}
-        />
-
-        {/* Editors shown on Compare + Validate */}
-        {tool === "compare" || tool === "validate" ? (
-          <ConfigEditors
-            format={format}
-            leftDraft={leftDraft}
-            rightDraft={rightDraft}
-            setLeftDraft={setLeftDraft}
-            setRightDraft={setRightDraft}
-            dragOver={dragOver}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onPaste={pasteFromClipboard}
-            onUpload={(side) => (side === "left" ? leftInputRef.current?.click() : rightInputRef.current?.click())}
-            onClear={(side) => onClearSide(side)}
-            // ✅ line preview annotations + jump wiring
-            leftAnnotations={tool === "validate" ? validateLeftAnnotations : tool === "compare" ? compareLeftAnnotations : []}
-            rightAnnotations={tool === "validate" ? validateRightAnnotations : tool === "compare" ? compareRightAnnotations : []}
-			jumpTo={jumpTo}
-			onConsumeJumpTo={() => setJumpTo(null)}
-          />
-        ) : null}
-
-        {/* Tool Content */}
-        {tool === "validate" ? (
-          <ValidatePanel
-            format={format}
-            THEME={THEME}
-            shareMsg={shareMsg}
-            pasteErr={pasteErr}
-            hasAnyDraft={hasAnyDraft}
-            validateStatus={validateStatus}
-            runValidate={runValidate}
-            validateHasRun={validateHasRun}
-            validateIsStale={validateIsStale}
-            hasValidateError={hasValidateError}
-            validateErrorText={hasValidateError ? String((validateObj as any).error ?? "") : null}
-            yamlStrict={yamlStrict}
-            setYamlStrict={setYamlStrict}
-            validateTotals={validateTotals}
-            vSevHigh={vSevHigh}
-            vSevMed={vSevMed}
-            vSevLow={vSevLow}
-            setVSevHigh={setVSevHigh}
-            setVSevMed={setVSevMed}
-            setVSevLow={setVSevLow}
-            leftIssuesAll={leftIssuesAll}
-            rightIssuesAll={rightIssuesAll}
-            leftIssues={leftIssues}
-            rightIssues={rightIssues}
-            // ✅ click issue → jump preview
-            onJumpToLine={(side, line) => {
-              setTool("validate");
-              setJumpTo({ side, line });
-            }}
-          />
-        ) : tool !== "compare" ? (
-          <div className="cd-card" style={{ marginTop: 14 }}>
-            <div className="cd-cardTitle" style={{ fontSize: 16 }}>
-              {TOOL_TABS.find((x) => x.id === tool)?.label}
-            </div>
-            <div className="cd-cardHint" style={{ marginTop: 6 }}>
-              Coming soon.
-            </div>
-          </div>
-        ) : (
-          <ComparePanel
+        {/* ✅ Summary bar under tabs (Compare only) */}
+        {tool === "compare" ? (
+          <CompareSummaryBar
             THEME={THEME}
             shareMsg={shareMsg}
             pasteErr={pasteErr}
@@ -1267,18 +1235,231 @@ export default function Home() {
             onTriggerImportShareJSON={() => shareImportRef.current?.click()}
             onClearSavedDraft={clearSavedDraft}
             filteredAll={filteredAll}
-            rendered={rendered}
             findingCountsUI={findingCountsUI}
             findingCountsAll={findingCountsAll}
-            showingText={showingText}
-            copyKeys={copyKeys}
-            renderChangedValue={renderChangedValue}
-            displaySingle={displaySingle}
-            // ✅ Compare click → jump
-            getFindingLineHint={(id) => compareLineHints.get(id) ?? null}
-            onJumpToLine={(side, line) => setJumpTo({ side, line })}
+            onRunCompare={runCompare}
+            compareRunning={compareRunning}
           />
-        )}
+        ) : null}
+
+        {/* Hidden inputs */}
+        <input
+          ref={leftInputRef}
+          type="file"
+          accept=".env,.txt,.json,.yml,.yaml,application/json,text/yaml,application/x-yaml,*/*"
+          style={{ display: "none" }}
+          onChange={(e) => onPickFile("left", e.target.files?.[0])}
+        />
+        <input
+          ref={rightInputRef}
+          type="file"
+          accept=".env,.txt,.json,.yml,.yaml,application/json,text/yaml,application/x-yaml,*/*"
+          style={{ display: "none" }}
+          onChange={(e) => onPickFile("right", e.target.files?.[0])}
+        />
+        <input
+          ref={shareImportRef}
+          type="file"
+          accept=".json,application/json"
+          style={{ display: "none" }}
+          onChange={(e) => onImportShareJSON(e.target.files?.[0])}
+        />
+
+        {/* =========================================================
+            ✅ VALIDATE LAYOUT:
+            1) Summary
+            2) Editors
+            3) Findings last
+           ========================================================= */}
+        {tool === "validate" ? (
+          <>
+            {/* 1) Summary first */}
+            <ValidatePanel
+              section="summary"
+              THEME={THEME}
+              hasAnyDraft={hasAnyDraft}
+              validateIsStale={validateIsStale}
+              validateHasRun={validateHasRun}
+              validateRunning={validateRunning}
+              runValidate={runValidate}
+              hasValidateError={hasValidateError}
+              validateErrorMsg={String((validateObj as any)?.error ?? "")}
+              validateTotals={validateTotals}
+              yamlStrict={yamlStrict}
+              setYamlStrict={setYamlStrict}
+              vSevHigh={vSevHigh}
+              setVSevHigh={setVSevHigh}
+              vSevMed={vSevMed}
+              setVSevMed={setVSevMed}
+              vSevLow={vSevLow}
+              setVSevLow={setVSevLow}
+              leftIssues={leftIssues}
+              rightIssues={rightIssues}
+              leftIssuesAllRaw={leftIssuesAllRaw}
+              rightIssuesAllRaw={rightIssuesAllRaw}
+            />
+
+            {/* 2) Editors in the middle (wrapped for scroll anchor) */}
+            <div ref={editorsRef}>
+              <ConfigEditors
+                format={format}
+                leftDraft={leftDraft}
+                rightDraft={rightDraft}
+                setLeftDraft={setLeftDraft}
+                setRightDraft={setRightDraft}
+                dragOver={dragOver}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onPaste={pasteFromClipboard}
+                onUpload={(side) => (side === "left" ? leftInputRef.current?.click() : rightInputRef.current?.click())}
+                onClear={(side) => onClearSide(side)}
+                leftAnnotations={validateLeftAnnotations}
+                rightAnnotations={validateRightAnnotations}
+                jumpTo={jumpTo}
+                onConsumeJumpTo={() => setJumpTo(null)}
+              />
+            </div>
+
+            {/* 3) Risk Findings LAST */}
+            <ValidatePanel
+              section="findings"
+              THEME={THEME}
+              leftLabel="Production"
+              rightLabel="Staging"
+              hasAnyDraft={hasAnyDraft}
+              validateIsStale={validateIsStale}
+              validateHasRun={validateHasRun}
+              validateRunning={validateRunning}
+              runValidate={runValidate}
+              hasValidateError={hasValidateError}
+              validateErrorMsg={String((validateObj as any)?.error ?? "")}
+              validateTotals={validateTotals}
+              yamlStrict={yamlStrict}
+              setYamlStrict={setYamlStrict}
+              vSevHigh={vSevHigh}
+              setVSevHigh={setVSevHigh}
+              vSevMed={vSevMed}
+              setVSevMed={setVSevMed}
+              vSevLow={vSevLow}
+              setVSevLow={setVSevLow}
+              leftIssues={leftIssues}
+              rightIssues={rightIssues}
+              leftIssuesAllRaw={leftIssuesAllRaw}
+              rightIssuesAllRaw={rightIssuesAllRaw}
+              onJumpToLine={(side, line) => setJumpTo({ side, line })}
+            />
+          </>
+        ) : null}
+
+        {/* =========================================================
+            ✅ COMPARE layout stays as you have it
+           ========================================================= */}
+        {tool === "compare" ? (
+          <>
+            {/* Editors (wrapped for scroll anchor) */}
+            <div ref={editorsRef}>
+              <ConfigEditors
+                format={format}
+                leftDraft={leftDraft}
+                rightDraft={rightDraft}
+                setLeftDraft={setLeftDraft}
+                setRightDraft={setRightDraft}
+                dragOver={dragOver}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onPaste={pasteFromClipboard}
+                onUpload={(side) => (side === "left" ? leftInputRef.current?.click() : rightInputRef.current?.click())}
+                onClear={(side) => onClearSide(side)}
+                leftAnnotations={compareLeftAnnotations}
+                rightAnnotations={compareRightAnnotations}
+                jumpTo={jumpTo}
+                onConsumeJumpTo={() => setJumpTo(null)}
+              />
+            </div>
+
+            <ComparePanel
+              THEME={THEME}
+              shareMsg={shareMsg}
+              pasteErr={pasteErr}
+              compareLabel={compareLabel}
+              draftReady={draftReady}
+              hasCompared={hasCompared}
+              result={result}
+              query={query}
+              setQuery={setQuery}
+              showChanged={showChanged}
+              setShowChanged={setShowChanged}
+              showAdded={showAdded}
+              setShowAdded={setShowAdded}
+              showRemoved={showRemoved}
+              setShowRemoved={setShowRemoved}
+              showFindings={showFindings}
+              setShowFindings={setShowFindings}
+              sevHigh={sevHigh}
+              setSevHigh={setSevHigh}
+              sevMed={sevMed}
+              setSevMed={setSevMed}
+              sevLow={sevLow}
+              setSevLow={setSevLow}
+              maskValues={maskValues}
+              setMaskValues={setMaskValues}
+              secretsOnly={secretsOnly}
+              setSecretsOnly={setSecretsOnly}
+              showMore={showMore}
+              setShowMore={setShowMore as any}
+              format={format}
+              envProfile={envProfile}
+              setEnvProfile={setEnvProfile}
+              rowLimit={rowLimit}
+              setRowLimit={setRowLimit}
+              sortMode={sortMode}
+              setSortMode={setSortMode}
+              anyTruncated={anyTruncated}
+              filtersHint={filtersHint}
+              applyPresetOnlyChanged={applyPresetOnlyChanged}
+              onDownloadJSON={() => {
+                const report = buildReport();
+                if (!report) return;
+                downloadText(`configsift-report-${Date.now()}.json`, JSON.stringify(report, null, 2), "application/json");
+              }}
+              onDownloadMarkdown={() => {
+                const report = buildReport();
+                if (!report) return;
+                downloadText(`configsift-report-${Date.now()}.md`, reportToMarkdown(report), "text/markdown");
+              }}
+              onDownloadShareJSON={downloadShareJSON}
+              onTriggerImportShareJSON={() => shareImportRef.current?.click()}
+              onClearSavedDraft={clearSavedDraft}
+              filteredAll={filteredAll}
+              rendered={rendered}
+              findingCountsUI={findingCountsUI}
+              findingCountsAll={findingCountsAll}
+              showingText={showingText}
+              copyKeys={copyKeys}
+              renderChangedValue={renderChangedValue}
+              displaySingle={displaySingle}
+              getFindingLineHint={(id) => compareLineHints.get(id) ?? null}
+              onJumpToLine={(side, line) => setJumpTo({ side, line })}
+            />
+          </>
+        ) : null}
+
+        {/* Other tools */}
+        {tool !== "compare" && tool !== "validate" ? (
+          <div className="cd-card" style={{ marginTop: 14 }}>
+            <div className="cd-cardTitle" style={{ fontSize: 16 }}>
+              {TOOL_TABS.find((x) => x.id === tool)?.label}
+            </div>
+            <div className="cd-cardHint" style={{ marginTop: 6 }}>
+              Coming soon.
+            </div>
+            <div className="mutedSm" style={{ marginTop: 10, opacity: 0.9 }}>
+              © 2026 ConfigSift • All processing in your browser — nothing uploaded.
+            </div>
+          </div>
+        ) : null}
       </div>
     </main>
   );

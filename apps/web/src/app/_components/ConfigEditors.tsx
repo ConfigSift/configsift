@@ -319,6 +319,29 @@ export function ConfigEditors(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.jumpTo, leftLines.length, rightLines.length]);
 
+  const FIXED_EDITOR_PX = 360;
+
+  const paneStyle: React.CSSProperties = {
+    minWidth: 0, // ✅ critical: allow flex children to shrink instead of expanding the page
+    overflow: "hidden", // ✅ prevent inner pre/long lines from widening the layout
+  };
+
+  const dropZoneStyle: React.CSSProperties = {
+    minWidth: 0,
+    overflow: "hidden",
+  };
+
+  const textareaStyle: React.CSSProperties = {
+    height: FIXED_EDITOR_PX,
+    minHeight: FIXED_EDITOR_PX,
+    maxHeight: FIXED_EDITOR_PX, // ✅ fixed-size editor
+    overflow: "auto", // ✅ internal scroll
+    resize: "none",
+    whiteSpace: "pre",
+    overflowWrap: "normal",
+    wordBreak: "normal",
+  };
+
   const PreviewFooter = ({ side }: { side: Side }) => {
     const isOpen = open[side];
     const hasText = (side === "left" ? props.leftDraft : props.rightDraft).trim().length > 0;
@@ -357,14 +380,24 @@ export function ConfigEditors(props: {
     const notice = (side === "left" ? jumpNotice.left : jumpNotice.right) ?? null;
 
     return (
-      <div className="cd-previewWrap">
+      <div className="cd-previewWrap" style={{ minWidth: 0 }}>
         {notice ? (
           <div className="callout callout-info" style={{ marginTop: 10, marginBottom: 10 }}>
             {notice}
           </div>
         ) : null}
 
-        <div ref={boxRef} className="cd-previewBox" role="region" aria-label={`${side} preview`}>
+        <div
+          ref={boxRef}
+          className="cd-previewBox"
+          role="region"
+          aria-label={`${side} preview`}
+          style={{
+            maxWidth: "100%",
+            overflowX: "auto", // ✅ horizontal scroll inside preview (no layout expansion)
+            overflowY: "auto",
+          }}
+        >
           {lines.map((txt, i) => {
             const lineNo = i + 1;
             const hits = idx.get(lineNo);
@@ -381,12 +414,17 @@ export function ConfigEditors(props: {
                 data-hit={hit ? "true" : "false"}
                 data-sev={sev ?? ""}
                 title={hits?.[0]?.label ? String(hits[0].label) : undefined}
+                style={{ minWidth: 0 }}
               >
                 <div className="cd-gutter">
                   <span className="cd-ln">{lineNo}</span>
                   <span className="cd-gutterMark" aria-hidden="true" />
                 </div>
-                <pre className="cd-lineText">{txt.length ? txt : " "}</pre>
+
+                {/* keep as <pre> but ensure container scrolls instead of expanding */}
+                <pre className="cd-lineText" style={{ minWidth: 0, whiteSpace: "pre" }}>
+                  {txt.length ? txt : " "}
+                </pre>
               </div>
             );
           })}
@@ -402,9 +440,9 @@ export function ConfigEditors(props: {
   };
 
   return (
-    <div className="twoCol" style={{ marginTop: 14 }}>
+    <div className="twoCol" style={{ marginTop: 14, width: "100%" }}>
       {/* LEFT */}
-      <div className="cd-card">
+      <div className="cd-card" style={paneStyle}>
         <div className="cd-cardHeader">
           <div>
             <div className="cd-cardTitle">Environment 1</div>
@@ -426,6 +464,7 @@ export function ConfigEditors(props: {
 
         <div
           className="dropZone"
+          style={dropZoneStyle}
           data-active={props.dragOver.left ? "true" : "false"}
           onDrop={(e) => props.onDrop("left", e)}
           onDragOver={(e) => props.onDragOver("left", e)}
@@ -437,6 +476,9 @@ export function ConfigEditors(props: {
             onChange={(e) => props.setLeftDraft(e.target.value)}
             placeholder={placeholder}
             className="cd-textarea"
+            style={textareaStyle}
+            wrap="off"
+            spellCheck={false}
           />
 
           <PreviewFooter side="left" />
@@ -445,7 +487,7 @@ export function ConfigEditors(props: {
       </div>
 
       {/* RIGHT */}
-      <div className="cd-card">
+      <div className="cd-card" style={paneStyle}>
         <div className="cd-cardHeader">
           <div>
             <div className="cd-cardTitle">Environment 2</div>
@@ -467,6 +509,7 @@ export function ConfigEditors(props: {
 
         <div
           className="dropZone"
+          style={dropZoneStyle}
           data-active={props.dragOver.right ? "true" : "false"}
           onDrop={(e) => props.onDrop("right", e)}
           onDragOver={(e) => props.onDragOver("right", e)}
@@ -478,6 +521,9 @@ export function ConfigEditors(props: {
             onChange={(e) => props.setRightDraft(e.target.value)}
             placeholder={placeholder}
             className="cd-textarea"
+            style={textareaStyle}
+            wrap="off"
+            spellCheck={false}
           />
 
           <PreviewFooter side="right" />

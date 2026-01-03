@@ -3,8 +3,6 @@
 
 /* -----------------------------
    Theme variables (for UI components)
-   - Works with html[data-theme="dark"] toggle you already use
-   - Badge dots now match theme automatically
 -------------------------------- */
 :root {
   /* Badge dot colors (light) */
@@ -18,7 +16,7 @@
   /* Badge dot glow (light) */
   --badge-dot-glow: rgba(74, 127, 235, 0.12);
 
-  /* ✅ Select theming (light) */
+  /* Select theming (light) */
   --cd-select-bg: rgba(255, 255, 255, 0.95);
   --cd-select-border: rgba(53, 56, 83, 0.10);
   --cd-select-border-hover: rgba(74, 127, 235, 0.24);
@@ -39,12 +37,12 @@ html[data-theme="dark"] {
   /* Badge dot glow (dark) */
   --badge-dot-glow: rgba(77, 163, 255, 0.14);
 
-  /* ✅ Select theming (dark) */
+  /* Select theming (dark) */
   --cd-select-bg: rgba(255, 255, 255, 0.06);
   --cd-select-border: rgba(231, 236, 255, 0.14);
   --cd-select-border-hover: rgba(77, 163, 255, 0.28);
   --cd-select-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-  --cd-select-option-bg: #0C121B;
+  --cd-select-option-bg: #0c121b;
   --cd-select-option-text: rgba(232, 238, 249, 0.92);
 }
 
@@ -124,42 +122,31 @@ html[data-theme="dark"] {
   position: relative;
   display: inline-flex;
   align-items: center;
-
   padding: 4px;
   border-radius: 999px;
   border: 1px solid rgba(53, 56, 83, 0.10);
   background: rgba(255, 255, 255, 0.78);
   box-shadow: 0 8px 22px rgba(16, 21, 40, 0.06);
-
   gap: 0;
   --seg: 0;
-
-  /* smoother visuals */
   overflow: hidden;
 }
 
-/* Sliding highlight pill */
 .cd-segIndicator {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 4px;
-
   width: calc((100% - 8px) / 3);
   border-radius: 999px;
-
   background: rgba(74, 127, 235, 0.16);
   box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.12);
-
-  /* Slide */
   transform: translateX(calc(var(--seg) * 100%));
-
   transition:
     transform 420ms cubic-bezier(0.22, 1.15, 0.25, 1),
     box-shadow 260ms ease,
     background 260ms ease,
     filter 260ms ease;
-
   will-change: transform;
   pointer-events: none;
   filter: saturate(1.02);
@@ -168,25 +155,20 @@ html[data-theme="dark"] {
 .cd-segBtn {
   position: relative;
   z-index: 1;
-
   appearance: none;
   border: 0;
   background: transparent;
   color: #121528;
   cursor: pointer;
-
   height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-
   font-size: 13px;
   font-weight: 780;
   letter-spacing: -0.01em;
-
   flex: 1;
   min-width: 84px;
   text-align: center;
-
   transition: transform 110ms ease, opacity 200ms ease, background 200ms ease;
   user-select: none;
 }
@@ -197,10 +179,6 @@ html[data-theme="dark"] {
 
 .cd-segBtn:active {
   transform: translateY(1px) scale(0.99);
-}
-
-.cd-segBtn[data-on="true"] {
-  opacity: 1;
 }
 
 .cd-segBtn[data-on="false"] {
@@ -293,17 +271,14 @@ html[data-theme="dark"] {
   background: transparent;
   color: #121528;
   cursor: pointer;
-
   padding: 9px 12px;
   border-radius: 12px;
   font-size: 13px;
   font-weight: 760;
   letter-spacing: -0.01em;
-
   display: inline-flex;
   align-items: center;
   gap: 8px;
-
   transition: background 120ms ease, box-shadow 120ms ease, transform 80ms ease, opacity 120ms ease;
   user-select: none;
   white-space: nowrap;
@@ -371,6 +346,11 @@ html[data-theme="dark"] {
   margin-top: 2px;
   font-size: 12px;
   color: #5b5f77;
+}
+
+.twoCol > .cd-card {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .cd-actions {
@@ -489,7 +469,6 @@ html[data-theme="dark"] {
   border-radius: 999px;
 }
 
-/* ✅ FIX: make selector more specific so it beats html[data-theme="dark"] .btn */
 .btn.toggle[data-on="true"] {
   background: #4a7feb;
   border-color: #4a7feb;
@@ -512,13 +491,6 @@ html[data-theme="dark"] {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-}
-
-.sectionTitle {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 900;
-  letter-spacing: -0.02em;
 }
 
 /* ===== Controls Card ===== */
@@ -570,27 +542,21 @@ html[data-theme="dark"] {
   border-color: rgba(74, 127, 235, 0.30);
 }
 
-/* ✅ UPDATED: prettier .cd-select + consistent light/dark, with custom chevron */
+/* prettier .cd-select + consistent light/dark, with custom chevron */
 .cd-select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-
-  padding: 8px 38px 8px 12px; /* room for arrow */
+  padding: 8px 38px 8px 12px;
   border-radius: 12px;
   border: 1px solid var(--cd-select-border);
-
   background-color: var(--cd-select-bg);
   color: inherit;
-
   font-size: 13px;
   line-height: 1.1;
-
   box-shadow: var(--cd-select-shadow);
   transition: border-color 160ms ease, transform 160ms ease, background-color 160ms ease;
   outline: none;
-
-  /* Custom arrow using currentColor */
   background-image:
     linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);
@@ -612,7 +578,6 @@ html[data-theme="dark"] {
   transform: translateY(-1px);
 }
 
-/* ✅ Dropdown menu (where browser allows styling) */
 .cd-select option,
 .cd-select optgroup {
   background-color: var(--cd-select-option-bg);
@@ -691,8 +656,6 @@ html[data-theme="dark"] {
   cursor: pointer;
   user-select: none;
   transition: transform 80ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
-
-  /* NEW: make them look like "clickable toggles" even when all are ON */
   box-shadow: 0 0 0 0 rgba(74, 127, 235, 0);
 }
 
@@ -711,20 +674,33 @@ html[data-theme="dark"] {
   border-color: rgba(74, 127, 235, 0.30);
 }
 
-/* Dot + severity colors */
 .sevChip .dot {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: var(--dot, #7C6FDB);
+  background: var(--dot, #7c6fdb);
   box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.12);
 }
 
-.sevChip[data-sev="high"] { --dot: #DB7B5C; --chip-bg: rgba(219, 123, 92, 0.12); --chip-border: rgba(219, 123, 92, 0.28); --chip-ring: rgba(219, 123, 92, 0.18); }
-.sevChip[data-sev="medium"] { --dot: #F0B35B; --chip-bg: rgba(240, 179, 91, 0.14); --chip-border: rgba(240, 179, 91, 0.32); --chip-ring: rgba(240, 179, 91, 0.18); }
-.sevChip[data-sev="low"] { --dot: #46B37A; --chip-bg: rgba(70, 179, 122, 0.12); --chip-border: rgba(70, 179, 122, 0.30); --chip-ring: rgba(70, 179, 122, 0.18); }
+.sevChip[data-sev="high"] {
+  --dot: #db7b5c;
+  --chip-bg: rgba(219, 123, 92, 0.12);
+  --chip-border: rgba(219, 123, 92, 0.28);
+  --chip-ring: rgba(219, 123, 92, 0.18);
+}
+.sevChip[data-sev="medium"] {
+  --dot: #f0b35b;
+  --chip-bg: rgba(240, 179, 91, 0.14);
+  --chip-border: rgba(240, 179, 91, 0.32);
+  --chip-ring: rgba(240, 179, 91, 0.18);
+}
+.sevChip[data-sev="low"] {
+  --dot: #46b37a;
+  --chip-bg: rgba(70, 179, 122, 0.12);
+  --chip-border: rgba(70, 179, 122, 0.30);
+  --chip-ring: rgba(70, 179, 122, 0.18);
+}
 
-/* NEW: ON state is clearly "selected" */
 .sevChip[data-on="true"] {
   opacity: 1;
   background: var(--chip-bg);
@@ -732,7 +708,6 @@ html[data-theme="dark"] {
   box-shadow: 0 0 0 4px var(--chip-ring);
 }
 
-/* Off state = dimmed (but still clickable) */
 .sevChip[data-on="false"] {
   opacity: 0.45;
   background: rgba(255, 255, 255, 0.60);
@@ -740,70 +715,7 @@ html[data-theme="dark"] {
   box-shadow: none;
 }
 
-/* ===== Severity chips dark mode ===== */
-html[data-theme="dark"] .sevChip {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(231,236,255,0.14);
-  color: #E8EEF9;
-}
-
-html[data-theme="dark"] .sevChip:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(77,163,255,0.28);
-}
-
-html[data-theme="dark"] .sevChip:focus-visible {
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.18);
-  border-color: rgba(77,163,255,0.34);
-}
-
-html[data-theme="dark"] .sevChip .dot {
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.14);
-}
-
-/* NEW: dark ON state uses same per-severity ring/bg but still reads well */
-html[data-theme="dark"] .sevChip[data-on="true"] {
-  opacity: 1;
-  background: var(--chip-bg);
-  border-color: var(--chip-border);
-  box-shadow: 0 0 0 4px var(--chip-ring);
-}
-
-html[data-theme="dark"] .sevChip[data-on="false"] {
-  opacity: 0.45;
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(231,236,255,0.14);
-  box-shadow: none;
-}
-
-
-/* Off state = dimmed (but still clickable) */
-.sevChip[data-on="false"] {
-  opacity: 0.45;
-}
-
-/* ===== Severity chips dark mode ===== */
-html[data-theme="dark"] .sevChip {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(231,236,255,0.14);
-  color: #E8EEF9;
-}
-
-html[data-theme="dark"] .sevChip:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(77,163,255,0.28);
-}
-
-html[data-theme="dark"] .sevChip:focus-visible {
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.18);
-  border-color: rgba(77,163,255,0.34);
-}
-
-html[data-theme="dark"] .sevChip .dot {
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.14);
-}
-
-/* ===== Badges ===== */
+/* ===== Badges (Compare summary pills) ===== */
 
 .badgeRow {
   display: flex;
@@ -812,14 +724,17 @@ html[data-theme="dark"] .sevChip .dot {
   flex-wrap: wrap;
 }
 
+/* ✅ Light mode: tint each badge using its --dot color */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(53, 56, 83, 0.10);
-  background: rgba(255, 255, 255, 0.85);
+
+  border: 1px solid color-mix(in srgb, var(--dot) 22%, rgba(53, 56, 83, 0.10));
+  background: color-mix(in srgb, var(--dot) 10%, rgba(255, 255, 255, 0.85));
+
   font-size: 13px;
   color: #121528;
 }
@@ -828,8 +743,19 @@ html[data-theme="dark"] .sevChip .dot {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: var(--dot, #4a7feb);
-  box-shadow: 0 0 0 4px var(--badge-dot-glow);
+  background: var(--dot);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dot) 18%, transparent);
+}
+
+/* Fallback if color-mix isn't supported */
+@supports not (background: color-mix(in srgb, red 10%, white)) {
+  .badge {
+    border: 1px solid rgba(53, 56, 83, 0.10);
+    background: rgba(255, 255, 255, 0.85);
+  }
+  .badge .dot {
+    box-shadow: 0 0 0 4px var(--badge-dot-glow);
+  }
 }
 
 /* ===== Rows ===== */
@@ -864,27 +790,19 @@ html[data-theme="dark"] .sevChip .dot {
   }
 }
 
-
 /* ============================
    Preview (under editors)
-   - Styles the collapsible "Preview (with line numbers)" section
-   - Works in light + dark mode
    ============================ */
 
-/* The preview toggle button (it has aria-expanded) */
 .dropZone .btn[aria-expanded] {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-
   padding: 10px 12px;
   border-radius: 14px;
-
   font-weight: 780;
   letter-spacing: -0.01em;
-
-  /* "premium" feel without changing your theme */
   box-shadow: 0 10px 22px rgba(16, 21, 40, 0.08);
   transition: transform 120ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
@@ -894,20 +812,17 @@ html[data-theme="dark"] .sevChip .dot {
   box-shadow: 0 14px 30px rgba(16, 21, 40, 0.10);
 }
 
-/* Preview container (it uses .rows inside the dropZone) */
 .dropZone .rows {
   background: rgba(255, 255, 255, 0.70);
   border-color: rgba(53, 56, 83, 0.10);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
-/* Make preview text crisp */
 .dropZone .rows pre {
   color: inherit;
   line-height: 1.55;
 }
 
-/* Nicer scrollbars (supported browsers only) */
 .dropZone .rows {
   scrollbar-width: thin;
   scrollbar-color: rgba(74, 127, 235, 0.40) transparent;
@@ -931,37 +846,6 @@ html[data-theme="dark"] .sevChip .dot {
 
 .dropZone .rows::-webkit-scrollbar-thumb:hover {
   background: rgba(74, 127, 235, 0.45);
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-/* Dark mode adjustments */
-html[data-theme="dark"] .dropZone .btn[aria-expanded] {
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.40);
-}
-
-html[data-theme="dark"] .dropZone .btn[aria-expanded]:hover {
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48);
-}
-
-html[data-theme="dark"] .dropZone .rows {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(231, 236, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-html[data-theme="dark"] .dropZone .rows {
-  scrollbar-color: rgba(77, 163, 255, 0.48) transparent;
-}
-
-html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb {
-  background: rgba(77, 163, 255, 0.36);
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb:hover {
-  background: rgba(77, 163, 255, 0.50);
   border: 2px solid transparent;
   background-clip: content-box;
 }
@@ -996,20 +880,15 @@ html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.75);
   overflow: auto;
   max-height: 230px;
-}
 
-/* Prevent browser scroll anchoring from snapping the preview back to top */
-.cd-previewBox {
   overflow-anchor: none;
   overscroll-behavior: contain;
-  scroll-behavior: auto; /* ensure no smooth scroll interference */
+  scroll-behavior: auto;
 }
 
-/* Extra insurance: disable anchoring for children too */
 .cd-previewBox * {
   overflow-anchor: none;
 }
-
 
 .cd-lineRow {
   display: grid;
@@ -1054,26 +933,23 @@ html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb:hover {
   line-height: 1.45;
 }
 
-/* Highlight lines that have any annotation */
 .cd-lineRow[data-hit="true"] {
   background: rgba(74, 127, 235, 0.08);
 }
 
-/* Severity marker colors */
 .cd-lineRow[data-sev="high"] .cd-gutterMark {
-  background: #DB7B5C;
+  background: #db7b5c;
   box-shadow: 0 0 0 4px rgba(219, 123, 92, 0.18);
 }
 .cd-lineRow[data-sev="medium"] .cd-gutterMark {
-  background: #F0B35B;
+  background: #f0b35b;
   box-shadow: 0 0 0 4px rgba(240, 179, 91, 0.18);
 }
 .cd-lineRow[data-sev="low"] .cd-gutterMark {
-  background: #46B37A;
+  background: #46b37a;
   box-shadow: 0 0 0 4px rgba(70, 179, 122, 0.16);
 }
 
-/* Flash on jump */
 @keyframes cdFlash {
   0% { box-shadow: inset 0 0 0 0 rgba(74,127,235,0); }
   20% { box-shadow: inset 0 0 0 2000px rgba(74,127,235,0.14); }
@@ -1083,23 +959,6 @@ html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb:hover {
   animation: cdFlash 900ms ease;
 }
 
-/* L## pill on findings cards */
-.cd-linePill {
-  border: 1px solid rgba(53, 56, 83, 0.12);
-  background: rgba(255, 255, 255, 0.75);
-  border-radius: 999px;
-  padding: 5px 9px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.cd-linePill:hover {
-  border-color: rgba(74, 127, 235, 0.30);
-  background: rgba(74, 127, 235, 0.10);
-}
-
-/* Make line pills work as <button> without browser default styling */
 .cd-linePill {
   appearance: none;
   -webkit-appearance: none;
@@ -1112,38 +971,17 @@ html[data-theme="dark"] .dropZone .rows::-webkit-scrollbar-thumb:hover {
   letter-spacing: 0.02em;
   cursor: pointer;
 }
+
+.cd-linePill:hover {
+  border-color: rgba(74, 127, 235, 0.30);
+  background: rgba(74, 127, 235, 0.10);
+}
+
 .cd-linePill:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(74, 127, 235, 0.18);
   border-color: rgba(74, 127, 235, 0.30);
 }
-
-
-/* Dark mode */
-html[data-theme="dark"] .cd-previewBox {
-  border-color: rgba(231,236,255,0.14);
-  background: rgba(255,255,255,0.04);
-}
-html[data-theme="dark"] .cd-lineRow {
-  border-top-color: rgba(231,236,255,0.10);
-}
-html[data-theme="dark"] .cd-gutter {
-  color: rgba(232,238,249,0.60);
-}
-html[data-theme="dark"] .cd-lineRow[data-hit="true"] {
-  background: rgba(77,163,255,0.10);
-}
-html[data-theme="dark"] .cd-linePill {
-  border-color: rgba(231,236,255,0.14);
-  background: rgba(255,255,255,0.06);
-  color: rgba(232,238,249,0.92);
-}
-html[data-theme="dark"] .cd-linePill:hover {
-  border-color: rgba(77,163,255,0.30);
-  background: rgba(77,163,255,0.14);
-}
-
-
 
 /* ===== Findings ===== */
 
@@ -1162,17 +1000,9 @@ html[data-theme="dark"] .cd-linePill:hover {
   overflow: hidden;
 }
 
-.finding[data-sev="high"] {
-  --sev-accent: rgba(219, 123, 92, 0.85);
-}
-
-.finding[data-sev="medium"] {
-  --sev-accent: rgba(240, 179, 91, 0.90);
-}
-
-.finding[data-sev="low"] {
-  --sev-accent: rgba(70, 179, 122, 0.90);
-}
+.finding[data-sev="high"] { --sev-accent: rgba(219, 123, 92, 0.85); }
+.finding[data-sev="medium"] { --sev-accent: rgba(240, 179, 91, 0.90); }
+.finding[data-sev="low"] { --sev-accent: rgba(70, 179, 122, 0.90); }
 
 .finding::before {
   content: "";
@@ -1219,12 +1049,10 @@ html[data-theme="dark"] .cd-linePill:hover {
   background: rgba(219, 123, 92, 0.14);
   border-color: rgba(219, 123, 92, 0.28);
 }
-
 .sev-medium {
   background: rgba(240, 179, 91, 0.18);
   border-color: rgba(240, 179, 91, 0.34);
 }
-
 .sev-low {
   background: rgba(70, 179, 122, 0.16);
   border-color: rgba(70, 179, 122, 0.30);
@@ -1242,7 +1070,6 @@ html[data-theme="dark"] .cd-linePill:hover {
 
 /* ============================
    Night mode
-   toggled via: document.documentElement.dataset.theme = "dark"
    ============================ */
 
 html[data-theme="dark"] .mutedSm {
@@ -1283,7 +1110,6 @@ html[data-theme="dark"] .pill {
   color: rgba(232,238,249,0.78);
 }
 
-/* Segmented control dark mode */
 html[data-theme="dark"] .cd-seg {
   background: rgba(255,255,255,0.04);
   border-color: rgba(231,236,255,0.14);
@@ -1304,7 +1130,6 @@ html[data-theme="dark"] .cd-segIndicator {
   filter: saturate(1.05);
 }
 
-/* Tool tabs dark mode */
 html[data-theme="dark"] .cd-toolTabs {
   background: rgba(255,255,255,0.04);
   border-color: rgba(231,236,255,0.14);
@@ -1379,7 +1204,6 @@ html[data-theme="dark"] .btn.subtle:hover {
   border-color: rgba(77,163,255,0.34);
 }
 
-/* ✅ FIX (dark): force ON toggles to stay blue */
 html[data-theme="dark"] .btn.toggle[data-on="true"] {
   background: #2B7DFF;
   border-color: #2B7DFF;
@@ -1401,7 +1225,7 @@ html[data-theme="dark"] .controlRow {
   border-color: rgba(231,236,255,0.12);
 }
 
-/* ✅ IMPORTANT FIX: use background-color so we don't wipe .cd-select's arrow background-image */
+/* IMPORTANT: use background-color so we don't wipe .cd-select's arrow background-image */
 html[data-theme="dark"] .cd-input,
 html[data-theme="dark"] .cd-select,
 html[data-theme="dark"] .cd-number {
@@ -1417,14 +1241,15 @@ html[data-theme="dark"] .btn:focus-visible {
   border-color: rgba(77,163,255,0.34);
 }
 
+/* ✅ OPTIONAL #3: tint dark badges too (matches light) */
 html[data-theme="dark"] .badge {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(231,236,255,0.14);
+  background: color-mix(in srgb, var(--dot) 10%, rgba(255,255,255,0.05));
+  border-color: color-mix(in srgb, var(--dot) 20%, rgba(231,236,255,0.14));
   color: #E8EEF9;
 }
 
 html[data-theme="dark"] .badge .dot {
-  box-shadow: 0 0 0 4px rgba(77,163,255,0.14);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dot) 18%, transparent);
 }
 
 html[data-theme="dark"] .rows {
@@ -1510,7 +1335,9 @@ html[data-theme="dark"] .cd-footer {
   align-items: start;
 }
 
-.cd-codeRow:first-child { border-top: 0; }
+.cd-codeRow:first-child {
+  border-top: 0;
+}
 
 .cd-codeGutter {
   display: inline-flex;
@@ -1521,13 +1348,31 @@ html[data-theme="dark"] .cd-footer {
   user-select: none;
 }
 
-.cd-codeLineNo { width: 34px; text-align: right; opacity: 0.85; }
-.cd-codeMarker { width: 20px; text-align: center; opacity: 0.95; }
+.cd-codeLineNo {
+  width: 34px;
+  text-align: right;
+  opacity: 0.85;
+}
 
-.cd-codeText { margin: 0; white-space: pre; overflow-x: auto; }
+.cd-codeMarker {
+  width: 20px;
+  text-align: center;
+  opacity: 0.95;
+}
 
-.cd-codeRow[data-sev="high"] { background: rgba(219, 123, 92, 0.10); }
-.cd-codeRow[data-sev="medium"], .cd-codeRow[data-sev="low"] { background: rgba(240, 179, 91, 0.10); }
+.cd-codeText {
+  margin: 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.cd-codeRow[data-sev="high"] {
+  background: rgba(219, 123, 92, 0.10);
+}
+.cd-codeRow[data-sev="medium"],
+.cd-codeRow[data-sev="low"] {
+  background: rgba(240, 179, 91, 0.10);
+}
 
 .cd-codeRow[data-range="true"] {
   background-image: linear-gradient(90deg, rgba(74, 127, 235, 0.08), transparent);
@@ -1552,11 +1397,14 @@ html[data-theme="dark"] .cd-codeGutter {
   color: rgba(232, 238, 249, 0.65);
 }
 
-html[data-theme="dark"] .cd-codeRow[data-sev="high"] { background: rgba(219, 123, 92, 0.14); }
+html[data-theme="dark"] .cd-codeRow[data-sev="high"] {
+  background: rgba(219, 123, 92, 0.14);
+}
 html[data-theme="dark"] .cd-codeRow[data-sev="medium"],
-html[data-theme="dark"] .cd-codeRow[data-sev="low"] { background: rgba(240, 179, 91, 0.14); }
+html[data-theme="dark"] .cd-codeRow[data-sev="low"] {
+  background: rgba(240, 179, 91, 0.14);
+}
 
 html[data-theme="dark"] .cd-codeRow[data-range="true"] {
   background-image: linear-gradient(90deg, rgba(77, 163, 255, 0.12), transparent);
 }
-

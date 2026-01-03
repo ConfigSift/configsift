@@ -18,7 +18,7 @@ type FindingItem = {
   side: "left" | "right" | "both" | "unmapped";
 };
 
-export function ComparePanel(props: {
+export type ComparePanelProps = {
   THEME: any;
 
   shareMsg: string | null;
@@ -97,132 +97,81 @@ export function ComparePanel(props: {
   // line hints + jump handler
   getFindingLineHint: (id: string) => { leftLine?: number; rightLine?: number } | null;
   onJumpToLine: (side: Side, line: number) => void;
-}) {
-  const renderFindingCard = (item: FindingItem, forcedSide?: Side) => {
-    const { f, sev, leftLine, rightLine } = item;
+};
 
-    const preferredSide: Side | null = forcedSide ?? (leftLine ? "left" : rightLine ? "right" : null);
+export type CompareSummaryBarProps = Pick<
+  ComparePanelProps,
+  | "THEME"
+  | "shareMsg"
+  | "pasteErr"
+  | "compareLabel"
+  | "draftReady"
+  | "hasCompared"
+  | "result"
+  | "query"
+  | "setQuery"
+  | "showChanged"
+  | "setShowChanged"
+  | "showAdded"
+  | "setShowAdded"
+  | "showRemoved"
+  | "setShowRemoved"
+  | "showFindings"
+  | "setShowFindings"
+  | "sevHigh"
+  | "setSevHigh"
+  | "sevMed"
+  | "setSevMed"
+  | "sevLow"
+  | "setSevLow"
+  | "maskValues"
+  | "setMaskValues"
+  | "secretsOnly"
+  | "setSecretsOnly"
+  | "showMore"
+  | "setShowMore"
+  | "format"
+  | "envProfile"
+  | "setEnvProfile"
+  | "rowLimit"
+  | "setRowLimit"
+  | "sortMode"
+  | "setSortMode"
+  | "anyTruncated"
+  | "filtersHint"
+  | "applyPresetOnlyChanged"
+  | "onDownloadJSON"
+  | "onDownloadMarkdown"
+  | "onDownloadShareJSON"
+  | "onTriggerImportShareJSON"
+  | "onClearSavedDraft"
+  | "filteredAll"
+  | "findingCountsUI"
+  | "findingCountsAll"
+> & {
+  /** NEW: lets Summary show a Compare button in the top-right (like Validate) */
+  onRunCompare?: () => void;
+  /** Optional: if you wire status from Home later */
+  compareRunning?: boolean;
+};
 
-    const preferredLine =
-      preferredSide === "left" ? leftLine : preferredSide === "right" ? rightLine : undefined;
+export function CompareSummaryBar(props: CompareSummaryBarProps) {
+  const hasError = "error" in (props.result as any);
 
-    const clickable = !!preferredSide && !!preferredLine;
+  // ✅ Step 1: clearer status + guidance text (integrated)
+  const statusPill = props.compareRunning
+    ? "Comparing…"
+    : !props.draftReady
+    ? "Waiting for both configs"
+    : props.hasCompared
+    ? "Compared"
+    : "Ready";
 
-    return (
-      <div
-        key={item.id}
-        className="finding"
-        data-sev={sev}
-        style={clickable ? { cursor: "pointer" } : undefined}
-        title={clickable ? "Click to jump to line in preview" : undefined}
-        role={clickable ? "button" : undefined}
-        tabIndex={clickable ? 0 : -1}
-        onClick={() => {
-          if (!clickable) return;
-          props.onJumpToLine(preferredSide!, preferredLine!);
-        }}
-        onKeyDown={(e) => {
-          if (!clickable) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            props.onJumpToLine(preferredSide!, preferredLine!);
-          }
-        }}
-      >
-        <div className="findingTop">
-          <div className="mono findingKey">{f.key}</div>
-
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            {forcedSide === "left" && leftLine ? (
-              <button
-                type="button"
-                className="cd-linePill"
-                title={`Jump to Left L${leftLine}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onJumpToLine("left", leftLine);
-                }}
-              >
-                L{leftLine}
-              </button>
-            ) : null}
-
-            {forcedSide === "right" && rightLine ? (
-              <button
-                type="button"
-                className="cd-linePill"
-                title={`Jump to Right R${rightLine}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onJumpToLine("right", rightLine);
-                }}
-              >
-                R{rightLine}
-              </button>
-            ) : null}
-
-            {!forcedSide && leftLine ? (
-              <button
-                type="button"
-                className="cd-linePill"
-                title={`Jump to Left L${leftLine}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onJumpToLine("left", leftLine);
-                }}
-              >
-                L{leftLine}
-              </button>
-            ) : null}
-
-            {!forcedSide && rightLine ? (
-              <button
-                type="button"
-                className="cd-linePill"
-                title={`Jump to Right R${rightLine}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onJumpToLine("right", rightLine);
-                }}
-              >
-                R{rightLine}
-              </button>
-            ) : null}
-
-            <span className={`sev sev-${sev}`}>{sev}</span>
-          </div>
-        </div>
-
-        <div className="findingMsg">{f.message}</div>
-      </div>
-    );
-  };
-
-  const findings: FindingItem[] = (
-    Array.isArray(props.rendered?.findingsFiltered) ? props.rendered.findingsFiltered : []
-  ).map((f: any, idx: number) => {
-    const sev = normSeverity(f.severity);
-    const id = `${String(f.key ?? "")}-${idx}`;
-    const hint = props.getFindingLineHint(id);
-    const leftLine = hint?.leftLine;
-    const rightLine = hint?.rightLine;
-
-    let side: FindingItem["side"] = "unmapped";
-    if (leftLine && rightLine) side = "both";
-    else if (leftLine) side = "left";
-    else if (rightLine) side = "right";
-    else {
-      const msg = String(f?.message ?? "");
-      if (/\bleft\b/i.test(msg) && !/\bright\b/i.test(msg)) side = "left";
-      else if (/\bright\b/i.test(msg) && !/\bleft\b/i.test(msg)) side = "right";
-    }
-
-    return { id, idx, f, sev, leftLine, rightLine, side };
-  });
-
-  const leftFindings = findings.filter((x) => x.side === "left" || x.side === "both");
-  const rightFindings = findings.filter((x) => x.side === "right" || x.side === "both");
-  const unmappedFindings = findings.filter((x) => x.side === "unmapped");
+  const helperText = !props.draftReady
+    ? "Paste or upload both configs to enable comparison."
+    : props.hasCompared
+    ? "Up to date"
+    : `Next step: Click ${props.compareLabel}`;
 
   return (
     <>
@@ -239,17 +188,38 @@ export function ComparePanel(props: {
       )}
 
       <section style={{ marginTop: 18 }}>
-        <div className="sectionTitleRow">
-          <h2 className="sectionTitle">Summary</h2>
-          <div className="sectionTitleRight">
-            <span className="pill" title="Everything runs locally">
-              Browser-only · No uploads
-            </span>
-          </div>
-        </div>
-
+        {/* ✅ Compact header like Validate */}
         <div className="cd-card" style={{ marginTop: 10 }}>
-          <div className="cd-controls">
+          <div className="cd-cardHeader" style={{ alignItems: "center" }}>
+            <div>
+              <div className="cd-cardTitle">Summary</div>
+              <div className="cd-cardHint">Search, filter, and export results — nothing is uploaded.</div>
+            </div>
+
+            <div className="cd-actions" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span className="mutedSm" style={{ opacity: 0.9 }}>
+                {helperText}
+              </span>
+
+              <span className="pill" title="Compare status">
+                {statusPill}
+              </span>
+
+              {/* ✅ Compare button in top-right */}
+              <ActionButton
+                variant="primary"
+                onClick={() => props.onRunCompare?.()}
+                disabled={!props.draftReady || !props.onRunCompare || !!props.compareRunning}
+                title={!props.draftReady ? "Paste/upload both sides first" : "Run comparison"}
+              >
+                {props.compareLabel}
+              </ActionButton>
+            </div>
+          </div>
+
+          {/* ✅ Summary body (same controls, tighter spacing) */}
+          <div className="cd-controls" style={{ paddingTop: 10 }}>
+            {/* Keep the “next step” messaging, but tighter */}
             {!props.draftReady ? (
               <div className="callout callout-info" style={{ marginBottom: 10 }}>
                 <strong>Next step:</strong> Paste/upload both configs, then click <strong>{props.compareLabel}</strong>.
@@ -260,7 +230,7 @@ export function ComparePanel(props: {
               </div>
             ) : null}
 
-            {"error" in (props.result as any) ? (
+            {hasError ? (
               <div className="callout callout-danger" style={{ marginBottom: 10 }}>
                 <strong>Error:</strong> {(props.result as any).error}
               </div>
@@ -281,10 +251,10 @@ export function ComparePanel(props: {
 
             <div className="controlRow" style={{ alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <div className="controlLabel">Show</div>
+              <Toggle label="Findings" checked={props.showFindings} onChange={props.setShowFindings} />
               <Toggle label="Changed" checked={props.showChanged} onChange={props.setShowChanged} />
               <Toggle label="Added" checked={props.showAdded} onChange={props.setShowAdded} />
               <Toggle label="Removed" checked={props.showRemoved} onChange={props.setShowRemoved} />
-              <Toggle label="Findings" checked={props.showFindings} onChange={props.setShowFindings} />
               <ActionButton variant="subtle" onClick={props.applyPresetOnlyChanged} title="Quick preset: show only Changed">
                 Only Changed
               </ActionButton>
@@ -378,7 +348,11 @@ export function ComparePanel(props: {
                       <span className="pill" title="Some sections are truncated by the row limit.">
                         Truncated
                       </span>
-                      <ActionButton variant="subtle" onClick={() => props.setRowLimit(0)} title="Show all rows (may slow UI on huge diffs)">
+                      <ActionButton
+                        variant="subtle"
+                        onClick={() => props.setRowLimit(0)}
+                        title="Show all rows (may slow UI on huge diffs)"
+                      >
                         Show all (may slow)
                       </ActionButton>
                       <ActionButton variant="subtle" onClick={() => props.setRowLimit(500)} title="Reset row limit to 500">
@@ -403,7 +377,7 @@ export function ComparePanel(props: {
             <div className="exportRow">
               <ActionButton
                 onClick={props.onDownloadJSON}
-                disabled={!props.hasCompared || "error" in (props.result as any)}
+                disabled={!props.hasCompared || hasError}
                 title={!props.hasCompared ? "Run Compare first" : undefined}
               >
                 Download JSON
@@ -411,16 +385,24 @@ export function ComparePanel(props: {
 
               <ActionButton
                 onClick={props.onDownloadMarkdown}
-                disabled={!props.hasCompared || "error" in (props.result as any)}
+                disabled={!props.hasCompared || hasError}
                 title={!props.hasCompared ? "Run Compare first" : undefined}
               >
                 Download Markdown
               </ActionButton>
 
-              <ActionButton variant="subtle" onClick={props.onDownloadShareJSON} title="Export inputs + UI settings (for sharing large configs)">
+              <ActionButton
+                variant="subtle"
+                onClick={props.onDownloadShareJSON}
+                title="Export inputs + UI settings (for sharing large configs)"
+              >
                 Share JSON
               </ActionButton>
-              <ActionButton variant="subtle" onClick={props.onTriggerImportShareJSON} title="Import inputs + UI settings from Share JSON">
+              <ActionButton
+                variant="subtle"
+                onClick={props.onTriggerImportShareJSON}
+                title="Import inputs + UI settings from Share JSON"
+              >
                 Import Share JSON
               </ActionButton>
 
@@ -431,61 +413,170 @@ export function ComparePanel(props: {
           </div>
         </div>
 
+        {/* ✅ Badges (kept) */}
         <div className="badgeRow">
+          <Badge
+            label={`Findings: ${props.filteredAll.findingsFiltered.length} / ${props.findingCountsAll.total}`}
+            variant="findings"
+          />
+          <Badge
+            label={`Critical: ${props.findingCountsUI.critical} / ${props.findingCountsAll.critical}`}
+            variant="critical"
+          />
+          <Badge
+            label={`Suggestions: ${props.findingCountsUI.suggestions} / ${props.findingCountsAll.suggestions}`}
+            variant="suggestions"
+          />
+
           <Badge label={`Changed: ${props.filteredAll.changedFiltered.length}`} variant="changed" />
           <Badge label={`Added: ${props.filteredAll.addedFiltered.length}`} variant="added" />
           <Badge label={`Removed: ${props.filteredAll.removedFiltered.length}`} variant="removed" />
-          <Badge label={`Critical: ${props.findingCountsUI.critical} / ${props.findingCountsAll.critical}`} variant="critical" />
-          <Badge label={`Suggestions: ${props.findingCountsUI.suggestions} / ${props.findingCountsAll.suggestions}`} variant="suggestions" />
-          <Badge label={`Findings: ${props.filteredAll.findingsFiltered.length} / ${props.findingCountsAll.total}`} variant="findings" />
         </div>
       </section>
+    </>
+  );
+}
 
+export function ComparePanel(props: ComparePanelProps) {
+  const renderFindingCard = (item: FindingItem, forcedSide?: Side) => {
+    const { f, sev, leftLine, rightLine } = item;
+
+    const preferredSide: Side | null = forcedSide ?? (leftLine ? "left" : rightLine ? "right" : null);
+    const preferredLine = preferredSide === "left" ? leftLine : preferredSide === "right" ? rightLine : undefined;
+    const clickable = !!preferredSide && !!preferredLine;
+
+    return (
+      <div
+        key={item.id}
+        className="finding"
+        data-sev={sev}
+        style={clickable ? { cursor: "pointer" } : undefined}
+        title={clickable ? "Click to jump to line in preview" : undefined}
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : -1}
+        onClick={() => {
+          if (!clickable) return;
+          props.onJumpToLine(preferredSide!, preferredLine!);
+        }}
+        onKeyDown={(e) => {
+          if (!clickable) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            props.onJumpToLine(preferredSide!, preferredLine!);
+          }
+        }}
+      >
+        <div className="findingTop">
+          <div className="mono findingKey">{f.key}</div>
+
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            {forcedSide === "left" && leftLine ? (
+              <button
+                type="button"
+                className="cd-linePill"
+                title={`Jump to Left L${leftLine}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onJumpToLine("left", leftLine);
+                }}
+              >
+                L{leftLine}
+              </button>
+            ) : null}
+
+            {forcedSide === "right" && rightLine ? (
+              <button
+                type="button"
+                className="cd-linePill"
+                title={`Jump to Right R${rightLine}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onJumpToLine("right", rightLine);
+                }}
+              >
+                R{rightLine}
+              </button>
+            ) : null}
+
+            {!forcedSide && leftLine ? (
+              <button
+                type="button"
+                className="cd-linePill"
+                title={`Jump to Left L${leftLine}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onJumpToLine("left", leftLine);
+                }}
+              >
+                L{leftLine}
+              </button>
+            ) : null}
+
+            {!forcedSide && rightLine ? (
+              <button
+                type="button"
+                className="cd-linePill"
+                title={`Jump to Right R${rightLine}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onJumpToLine("right", rightLine);
+                }}
+              >
+                R{rightLine}
+              </button>
+            ) : null}
+
+            <span className={`sev sev-${sev}`}>{sev}</span>
+          </div>
+        </div>
+
+        <div className="findingMsg">{f.message}</div>
+      </div>
+    );
+  };
+
+  const findings: FindingItem[] = (Array.isArray(props.rendered?.findingsFiltered) ? props.rendered.findingsFiltered : []).map(
+    (f: any, idx: number) => {
+      const sev = normSeverity(f.severity);
+      const id = `${String(f.key ?? "")}-${idx}`;
+      const hint = props.getFindingLineHint(id);
+      const leftLine = hint?.leftLine;
+      const rightLine = hint?.rightLine;
+
+      let side: FindingItem["side"] = "unmapped";
+      if (leftLine && rightLine) side = "both";
+      else if (leftLine) side = "left";
+      else if (rightLine) side = "right";
+      else {
+        const msg = String(f?.message ?? "");
+        if (/\bleft\b/i.test(msg) && !/\bright\b/i.test(msg)) side = "left";
+        else if (/\bright\b/i.test(msg) && !/\bleft\b/i.test(msg)) side = "right";
+      }
+
+      return { id, idx, f, sev, leftLine, rightLine, side };
+    }
+  );
+
+  const leftFindings = findings.filter((x) => x.side === "left" || x.side === "both");
+  const rightFindings = findings.filter((x) => x.side === "right" || x.side === "both");
+  const unmappedFindings = findings.filter((x) => x.side === "unmapped");
+
+  return (
+    <>
       {props.hasCompared && !("error" in (props.result as any)) ? (
         <>
-          {props.showChanged && (
-            <Section
-              title={`Changed — ${props.showingText(props.rendered.changedFiltered.length, props.filteredAll.changedFiltered.length)}`}
-              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.changedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
-            >
-              <div className="rows">
-                {props.rendered.changedFiltered.map((c: any) => (
-                  <RowNode key={c.key} k={c.key} vNode={props.renderChangedValue(c)} />
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {props.showAdded && (
-            <Section
-              title={`Added — ${props.showingText(props.rendered.addedFiltered.length, props.filteredAll.addedFiltered.length)}`}
-              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.addedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
-            >
-              <div className="rows">
-                {props.rendered.addedFiltered.map((a: any) => (
-                  <Row key={a.key} k={a.key} v={props.displaySingle(a.key, a.value)} />
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {props.showRemoved && (
-            <Section
-              title={`Removed — ${props.showingText(props.rendered.removedFiltered.length, props.filteredAll.removedFiltered.length)}`}
-              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.removedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
-            >
-              <div className="rows">
-                {props.rendered.removedFiltered.map((r: any) => (
-                  <Row key={r.key} k={r.key} v={props.displaySingle(r.key, r.value)} />
-                ))}
-              </div>
-            </Section>
-          )}
-
+          {/* ✅ REORDERED: Findings first */}
           {props.showFindings && (
             <Section
-              title={`Risk Findings — ${props.showingText(props.rendered.findingsFiltered.length, props.filteredAll.findingsFiltered.length)}`}
-              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.findingsFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
+              title={`Risk Findings — ${props.showingText(
+                props.rendered.findingsFiltered.length,
+                props.filteredAll.findingsFiltered.length
+              )}`}
+              rightSlot={
+                <ActionButton onClick={() => props.copyKeys(props.filteredAll.findingsFiltered.map((x: any) => x.key))}>
+                  Copy keys
+                </ActionButton>
+              }
             >
               {props.rendered.findingsFiltered.length === 0 ? (
                 <div className="mutedSm" style={{ padding: "6px 2px" }}>
@@ -567,13 +658,52 @@ export function ComparePanel(props: {
             </Section>
           )}
 
+          {props.showChanged && (
+            <Section
+              title={`Changed — ${props.showingText(props.rendered.changedFiltered.length, props.filteredAll.changedFiltered.length)}`}
+              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.changedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
+            >
+              <div className="rows">
+                {props.rendered.changedFiltered.map((c: any) => (
+                  <RowNode key={c.key} k={c.key} vNode={props.renderChangedValue(c)} />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {props.showAdded && (
+            <Section
+              title={`Added — ${props.showingText(props.rendered.addedFiltered.length, props.filteredAll.addedFiltered.length)}`}
+              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.addedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
+            >
+              <div className="rows">
+                {props.rendered.addedFiltered.map((a: any) => (
+                  <Row key={a.key} k={a.key} v={props.displaySingle(a.key, a.value)} />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {props.showRemoved && (
+            <Section
+              title={`Removed — ${props.showingText(props.rendered.removedFiltered.length, props.filteredAll.removedFiltered.length)}`}
+              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.removedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
+            >
+              <div className="rows">
+                {props.rendered.removedFiltered.map((r: any) => (
+                  <Row key={r.key} k={r.key} v={props.displaySingle(r.key, r.value)} />
+                ))}
+              </div>
+            </Section>
+          )}
+
           <div style={{ padding: "18px 4px 30px", color: props.THEME.muted, fontSize: 12, textAlign: "center" }}>
-            © {new Date().getFullYear()} ConfigSift • All processing in your browser — nothing uploaded.
+            © {new Date().getFullYear()} ConfigSift • All processing in your browser.
           </div>
         </>
       ) : (
         <div style={{ padding: "18px 4px 30px", color: props.THEME.muted, fontSize: 12, textAlign: "center" }}>
-          © {new Date().getFullYear()} ConfigSift • All processing in your browser — nothing uploaded.
+          © {new Date().getFullYear()} ConfigSift • All processing in your browser.
         </div>
       )}
     </>

@@ -1,23 +1,73 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import { ActionButton, Toggle, SevChip } from "./configdiff-ui";
-import { normSeverity } from "../lib/configdiff";
-import type { FormatId } from "../lib/shareState";
 
 type Side = "left" | "right";
 
-/**
- * Extract the most useful "jump-to" line number from a validation issue.
- * Handles cases where .env validator encodes line info in key/id (e.g. "Left:line:1")
- * or only in the message (e.g. "WARNING on line 5 ...").
- *
- * Strategy:
- * 1) Prefer structured numeric fields: line, __lineStart, loc.line, location.line
- * 2) Then scan key-ish fields: key/id/path/name for patterns
- * 3) Then scan message-ish fields: message/error/details/text
- * 4) If multiple "line N" matches exist, use the LAST one (often the real parse failure)
- */
+type Theme = {
+  card2?: string;
+  text?: string;
+  borderSoft?: string;
+  blueSoft?: string;
+  blueSoft2?: string;
+  shadowSm?: string;
+};
+
+type ValidateTotals = { high?: number; medium?: number; low?: number };
+
+type ValidatePanelProps = {
+  THEME: Theme;
+
+  /** control which part renders */
+  section?: "summary" | "findings" | "both";
+
+  /** Optional: customize headings in the findings columns */
+  leftLabel?: string;
+  rightLabel?: string;
+
+  hasAnyDraft: boolean;
+  validateIsStale: boolean;
+  validateHasRun: boolean;
+  validateRunning: boolean;
+  runValidate: () => void;
+
+  hasValidateError: boolean;
+  validateErrorMsg?: string;
+
+  validateTotals: ValidateTotals;
+
+  yamlStrict: boolean;
+  setYamlStrict: (v: boolean) => void;
+
+  vSevHigh: boolean;
+  setVSevHigh: (v: boolean) => void;
+  vSevMed: boolean;
+  setVSevMed: (v: boolean) => void;
+  vSevLow: boolean;
+  setVSevLow: (v: boolean) => void;
+
+  // filtered issues
+  leftIssues?: any[];
+  rightIssues?: any[];
+
+  // all issues (support both prop names)
+  leftIssuesAll?: any[];
+  rightIssuesAll?: any[];
+  leftIssuesAllRaw?: any[];
+  rightIssuesAllRaw?: any[];
+
+  onJumpToLine?: (side: Side, line: number) => void;
+};
+
+function normSev(sev: any): "high" | "medium" | "low" | "info" {
+  const s = String(sev ?? "").toLowerCase();
+  if (s.includes("high") || s.includes("crit") || s.includes("error")) return "high";
+  if (s.includes("med") || s.includes("warn")) return "medium";
+  if (s.includes("low")) return "low";
+  return "info";
+}
+
 function extractLineStart(issue: any): number | null {
   if (!issue) return null;
 
@@ -40,23 +90,6 @@ function extractLineStart(issue: any): number | null {
     const mSide = s.match(/\b(?:left|right)\s*[:\-]?\s*line\s*[:\s]+(\d+)\b/i);
     if (mSide) {
       const n = Number(mSide[1]);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
-
-    const mLineAtRange = s.match(/\bline\s+at\s+(\d+)\s*[-–]\s*(\d+)\b/i);
-    if (mLineAtRange) {
-      const n = Number(mLineAtRange[1]);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
-    const mLineAt = s.match(/\bline\s+at\s+(\d+)\b/i);
-    if (mLineAt) {
-      const n = Number(mLineAt[1]);
-      if (Number.isFinite(n) && n > 0) return n;
-    }
-
-    const mRange = s.match(/line\s*[:\s]+(\d+)\s*[-–]\s*(\d+)/i);
-    if (mRange) {
-      const n = Number(mRange[1]);
       if (Number.isFinite(n) && n > 0) return n;
     }
 
@@ -92,279 +125,260 @@ function extractLineStart(issue: any): number | null {
   return null;
 }
 
-export function ValidatePanel(props: {
-  format: FormatId;
-  THEME: any;
+export function ValidatePanel(props: ValidatePanelProps) {
+  const THEME = props.THEME ?? {};
+  const section = props.section ?? "both";
 
-  shareMsg: string | null;
-  pasteErr: string | null;
+// ✅ If both envs are cleared, force findings to clear in the UI even if parent still has stale arrays
+const hasDraft = !!props.hasAnyDraft;
 
-  hasAnyDraft: boolean;
+const leftIssues = hasDraft && Array.isArray(props.leftIssues) ? props.leftIssues : [];
+const rightIssues = hasDraft && Array.isArray(props.rightIssues) ? props.rightIssues : [];
 
-  validateStatus: string;
-  runValidate: () => void;
-  validateHasRun: boolean;
-  validateIsStale: boolean;
+const leftAll = hasDraft
+  ? (Array.isArray(props.leftIssuesAll) && props.leftIssuesAll) ||
+    (Array.isArray(props.leftIssuesAllRaw) && props.leftIssuesAllRaw) ||
+    []
+  : [];
 
-  hasValidateError: boolean;
-  validateErrorText: string | null;
+const rightAll = hasDraft
+  ? (Array.isArray(props.rightIssuesAll) && props.rightIssuesAll) ||
+    (Array.isArray(props.rightIssuesAllRaw) && props.rightIssuesAllRaw) ||
+    []
+  : [];
 
-  yamlStrict: boolean;
-  setYamlStrict: (v: boolean) => void;
 
-  validateTotals: { high?: number; medium?: number; low?: number };
-
-  vSevHigh: boolean;
-  vSevMed: boolean;
-  vSevLow: boolean;
-  setVSevHigh: (v: boolean) => void;
-  setVSevMed: (v: boolean) => void;
-  setVSevLow: (v: boolean) => void;
-
-  leftIssuesAll: any[];
-  rightIssuesAll: any[];
-  leftIssues: any[];
-  rightIssues: any[];
-
-  onJumpToLine?: (side: Side, line: number) => void;
-}) {
-  const fmtLabel = props.format === "env" ? ".env" : props.format === "json" ? "JSON" : "YAML";
-
-  const leftWithLine = useMemo(() => props.leftIssues.map((it) => ({ it, line: extractLineStart(it) })), [props.leftIssues]);
-  const rightWithLine = useMemo(() => props.rightIssues.map((it) => ({ it, line: extractLineStart(it) })), [props.rightIssues]);
+  const totalFiltered = leftIssues.length + rightIssues.length;
+  const totalAll = leftAll.length + rightAll.length;
 
   const stop = (e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
   };
 
-  return (
-    <>
-      {props.shareMsg && (
-        <div className="callout callout-info" style={{ marginTop: 12 }}>
-          {props.shareMsg}
-        </div>
-      )}
+  const renderIssue = (side: Side, it: any, idx: number) => {
+    const sev = normSev(it?.severity);
+    const line = extractLineStart(it);
+    const canJump = typeof line === "number" && Number.isFinite(line) && line > 0 && !!props.onJumpToLine;
 
-      {props.pasteErr && (
-        <div className="callout callout-danger" style={{ marginTop: 12 }}>
-          <strong>Paste error:</strong> {props.pasteErr}
-        </div>
-      )}
+    return (
+      <div
+        key={`${side}-${idx}-${String(it?.key ?? "Syntax")}`}
+        className="finding"
+        data-sev={sev}
+        role={canJump ? "button" : undefined}
+        tabIndex={canJump ? 0 : -1}
+        onClick={() => {
+          if (!canJump) return;
+          props.onJumpToLine?.(side, line!);
+        }}
+        onKeyDown={(e) => {
+          if (!canJump) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            props.onJumpToLine?.(side, line!);
+          }
+        }}
+        style={canJump ? { cursor: "pointer" } : undefined}
+        title={canJump ? "Click to jump to the corresponding line in the preview" : undefined}
+      >
+        <div className="findingTop">
+          <div className="mono findingKey">{it?.key ? String(it.key) : "Syntax"}</div>
 
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {canJump ? (
+              <button
+                type="button"
+                className="cd-linePill"
+                onMouseDown={(e) => stop(e)}
+                onClick={(e) => {
+                  stop(e);
+                  props.onJumpToLine?.(side, line!);
+                }}
+                title={`Jump to ${side === "left" ? "Left" : "Right"} ${side === "left" ? "L" : "R"}${line}`}
+              >
+                {side === "left" ? "L" : "R"}
+                {line}
+              </button>
+            ) : null}
+
+            <span className={`sev sev-${sev}`}>{sev}</span>
+          </div>
+        </div>
+
+        <div className="findingMsg">{String(it?.message ?? it?.details ?? it?.error ?? "")}</div>
+      </div>
+    );
+  };
+
+  const Summary = () => {
+    const statusPill =
+      props.validateRunning
+        ? "Validating…"
+        : !props.hasAnyDraft
+        ? "Not ready"
+        : props.validateHasRun
+        ? props.validateIsStale
+          ? "Edited"
+          : "Validated"
+        : "Not validated";
+
+    const helperText =
+      !props.hasAnyDraft
+        ? "Paste/upload Env 1 + Env 2 to validate"
+        : props.validateIsStale
+        ? "Draft changed — run Validate again"
+        : props.validateHasRun
+        ? "Up to date"
+        : "Not run yet";
+
+    return (
       <div className="cd-card" style={{ marginTop: 14 }}>
-        <div className="cd-cardTitle" style={{ fontSize: 16 }}>
-          Validate ({fmtLabel})
-        </div>
+        {/* header row: keep your current layout */}
+        <div className="cd-cardHeader" style={{ alignItems: "center" }}>
+          <div>
+            <div className="cd-cardTitle">Validate</div>
+            <div className="cd-cardHint">
+              Run validation against both environments. Fix issues before deploy — nothing is uploaded.
+            </div>
+          </div>
 
-        <div className="cd-cardHint" style={{ marginTop: 6 }}>
-          Checks syntax + common deploy risks (required keys, localhost/unsafe URLs, wildcard CORS, debug flags, secret hygiene).
-          Runs locally in a worker.
-        </div>
+          <div className="cd-actions" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span className="mutedSm" style={{ opacity: 0.9 }}>
+              {helperText}
+            </span>
 
-        {!props.hasAnyDraft ? (
-          <div className="callout callout-info" style={{ marginTop: 12 }}>
-            <strong>Paste or upload a config first.</strong> Validate runs on your current editor drafts (you don’t need to run Compare).
+            {/* ✅ old-style status pill */}
+            <span className="pill" title="Validation status">
+              {statusPill}
+            </span>
+
+            <ActionButton
+              variant="primary"
+              onClick={() => props.runValidate()}
+              disabled={!props.hasAnyDraft || props.validateRunning}
+              title={!props.hasAnyDraft ? "Paste/upload both sides first" : "Run validation"}
+            >
+              {props.validateRunning ? "Validating…" : "Run Validate"}
+            </ActionButton>
           </div>
-        ) : !props.validateHasRun ? (
-          <div className="callout callout-info" style={{ marginTop: 12 }}>
-            <strong>Not validated yet.</strong> Click <strong>Run Validate</strong> below.
-          </div>
-        ) : props.validateIsStale ? (
-          <div className="callout callout-info" style={{ marginTop: 12 }}>
-            <strong>Edited since last validation.</strong> Click <strong>Run Validate</strong> to refresh results.
-          </div>
-        ) : null}
+        </div>
 
         {props.hasValidateError ? (
           <div className="callout callout-danger" style={{ marginTop: 10 }}>
-            <strong>Error:</strong> {props.validateErrorText ?? "Validation failed."}
+            {String(props.validateErrorMsg ?? "Validation error")}
           </div>
         ) : null}
 
-        <div className="controlRow" style={{ marginTop: 12, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <ActionButton
-              variant="primary"
-              onClick={props.runValidate}
-              disabled={!props.hasAnyDraft as any}
-              title={!props.hasAnyDraft ? "Paste/upload at least one config draft first" : "Run validation now"}
-            >
-              {props.validateStatus === "Idle" ? "Run Validate" : "Validating…"}
-            </ActionButton>
+        {/* controls row: keep layout, swap styling back to Toggle + SevChip */}
+		<div
+		  className="controlRow"
+		  style={{
+			marginTop: 12,
+			alignItems: "center",
+			flexWrap: "wrap",
+			gap: 12,
+		  }}
+		>
+		  {/* left side */}
+		  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+			<Toggle label="Strict YAML" checked={!!props.yamlStrict} onChange={props.setYamlStrict} />
+		  </div>
 
-            {props.format === "yaml" ? <Toggle label="Strict YAML mode" checked={props.yamlStrict} onChange={props.setYamlStrict} /> : null}
+		  {/* right-aligned severity label + chips */}
+		  <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+			<span className="mutedSm" style={{ opacity: 0.9 }}>
+			  Severity filter:
+			</span>
 
-            <span className="pill" title="Validation status">
-              {props.validateStatus !== "Idle" ? "Validating…" : props.validateHasRun ? "Validated" : "Not validated"}
-            </span>
-          </div>
+			<SevChip
+			  sev="high"
+			  count={Number(props.validateTotals?.high ?? 0)}
+			  checked={!!props.vSevHigh}
+			  onChange={props.setVSevHigh}
+			/>
+			<SevChip
+			  sev="medium"
+			  count={Number(props.validateTotals?.medium ?? 0)}
+			  checked={!!props.vSevMed}
+			  onChange={props.setVSevMed}
+			/>
+			<SevChip
+			  sev="low"
+			  count={Number(props.validateTotals?.low ?? 0)}
+			  checked={!!props.vSevLow}
+			  onChange={props.setVSevLow}
+			/>
+		  </div>
+		</div>
 
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <SevChip sev="high" count={props.validateTotals.high ?? 0} checked={props.vSevHigh} onChange={props.setVSevHigh} />
-            <SevChip sev="medium" count={props.validateTotals.medium ?? 0} checked={props.vSevMed} onChange={props.setVSevMed} />
-            <SevChip sev="low" count={props.validateTotals.low ?? 0} checked={props.vSevLow} onChange={props.setVSevLow} />
+      </div>
+    );
+  };
+
+  const Findings = () => (
+    <div className="cd-card" style={{ marginTop: 14 }}>
+      <div className="cd-cardHeader">
+        <div>
+          <div className="cd-cardTitle">Risk Findings</div>
+          <div className="cd-cardHint">
+            {totalFiltered} / {totalAll}
           </div>
         </div>
       </div>
 
-      <div className="twoCol" style={{ marginTop: 14 }}>
-        {/* LEFT */}
-        <div className="cd-card">
-          <div className="cd-cardHeader">
-            <div>
-              <div className="cd-cardTitle">Environment 1</div>
-              <div className="cd-cardHint">
-                Issues found: {props.leftIssues.length}
-                {props.leftIssues.length !== props.leftIssuesAll.length ? ` (filtered from ${props.leftIssuesAll.length})` : ""}
+      {totalFiltered === 0 ? (
+        <div style={{ padding: 12 }} className="mutedSm">
+          No findings.
+        </div>
+      ) : (
+        <div className="twoCol" style={{ marginTop: 8, padding: 12 }}>
+          <div className="cd-card" style={{ padding: 12, background: THEME.card2 }}>
+            <div className="cd-cardHeader">
+              <div>
+                <div className="cd-cardTitle">{props.leftLabel ?? "Production"} (Left)</div>
+                <div className="cd-cardHint">{leftIssues.length} finding(s)</div>
               </div>
             </div>
+
+            {leftIssues.length === 0 ? (
+              <div className="mutedSm" style={{ padding: "8px 2px" }}>
+                No left-side findings.
+              </div>
+            ) : (
+              <div className="findingList" style={{ marginTop: 10 }}>
+                {leftIssues.map((it, idx) => renderIssue("left", it, idx))}
+              </div>
+            )}
           </div>
 
-          <div style={{ padding: 12 }}>
-            {!props.hasAnyDraft ? (
-              <div className="mutedSm">Paste/upload a config to validate.</div>
-            ) : props.leftIssuesAll.length === 0 ? (
-              <div className="mutedSm">No issues detected.</div>
-            ) : props.leftIssues.length === 0 ? (
-              <div className="mutedSm">No issues at the selected severities.</div>
+          <div className="cd-card" style={{ padding: 12, background: THEME.card2 }}>
+            <div className="cd-cardHeader">
+              <div>
+                <div className="cd-cardTitle">{props.rightLabel ?? "Staging"} (Right)</div>
+                <div className="cd-cardHint">{rightIssues.length} finding(s)</div>
+              </div>
+            </div>
+
+            {rightIssues.length === 0 ? (
+              <div className="mutedSm" style={{ padding: "8px 2px" }}>
+                No right-side findings.
+              </div>
             ) : (
-              <div className="findingList">
-                {leftWithLine.map(({ it, line }, idx) => {
-                  const sev = normSeverity(it?.severity);
-                  const canJump = typeof line === "number" && Number.isFinite(line) && line > 0 && !!props.onJumpToLine;
-
-                  return (
-                    <div
-                      key={`l-${idx}`}
-                      className="finding"
-                      data-sev={sev}
-                      role={canJump ? "button" : undefined}
-                      tabIndex={canJump ? 0 : -1}
-                      onClick={() => {
-                        if (!canJump) return;
-                        props.onJumpToLine?.("left", line!);
-                      }}
-                      onKeyDown={(e) => {
-                        if (!canJump) return;
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          props.onJumpToLine?.("left", line!);
-                        }
-                      }}
-                      style={canJump ? { cursor: "pointer" } : undefined}
-                      title={canJump ? "Click to jump to the corresponding line in the preview" : undefined}
-                    >
-                      <div className="findingTop">
-                        <div className="mono findingKey">{it?.key ? String(it.key) : "Syntax"}</div>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          {canJump ? (
-                            <button
-                              type="button"
-                              className="cd-linePill"
-                              onMouseDown={(e) => stop(e)}
-                              onClick={(e) => {
-                                stop(e);
-                                props.onJumpToLine?.("left", line!);
-                              }}
-                              title={`Jump to Left L${line}`}
-                            >
-                              L{line}
-                            </button>
-                          ) : null}
-                          <span className={`sev sev-${sev}`}>{sev}</span>
-                        </div>
-                      </div>
-                      <div className="findingMsg">{String(it?.message ?? it?.details ?? it?.error ?? "")}</div>
-                    </div>
-                  );
-                })}
+              <div className="findingList" style={{ marginTop: 10 }}>
+                {rightIssues.map((it, idx) => renderIssue("right", it, idx))}
               </div>
             )}
           </div>
         </div>
+      )}
+    </div>
+  );
 
-        {/* RIGHT */}
-        <div className="cd-card">
-          <div className="cd-cardHeader">
-            <div>
-              <div className="cd-cardTitle">Environment 2</div>
-              <div className="cd-cardHint">
-                Issues found: {props.rightIssues.length}
-                {props.rightIssues.length !== props.rightIssuesAll.length ? ` (filtered from ${props.rightIssuesAll.length})` : ""}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ padding: 12 }}>
-            {!props.hasAnyDraft ? (
-              <div className="mutedSm">Paste/upload a config to validate.</div>
-            ) : props.rightIssuesAll.length === 0 ? (
-              <div className="mutedSm">No issues detected.</div>
-            ) : props.rightIssues.length === 0 ? (
-              <div className="mutedSm">No issues at the selected severities.</div>
-            ) : (
-              <div className="findingList">
-                {rightWithLine.map(({ it, line }, idx) => {
-                  const sev = normSeverity(it?.severity);
-                  const canJump = typeof line === "number" && Number.isFinite(line) && line > 0 && !!props.onJumpToLine;
-
-                  return (
-                    <div
-                      key={`r-${idx}`}
-                      className="finding"
-                      data-sev={sev}
-                      role={canJump ? "button" : undefined}
-                      tabIndex={canJump ? 0 : -1}
-                      onClick={() => {
-                        if (!canJump) return;
-                        props.onJumpToLine?.("right", line!);
-                      }}
-                      onKeyDown={(e) => {
-                        if (!canJump) return;
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          props.onJumpToLine?.("right", line!);
-                        }
-                      }}
-                      style={canJump ? { cursor: "pointer" } : undefined}
-                      title={canJump ? "Click to jump to the corresponding line in the preview" : undefined}
-                    >
-                      <div className="findingTop">
-                        <div className="mono findingKey">{it?.key ? String(it.key) : "Syntax"}</div>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          {canJump ? (
-                            <button
-                              type="button"
-                              className="cd-linePill"
-                              onMouseDown={(e) => stop(e)}
-                              onClick={(e) => {
-                                stop(e);
-                                props.onJumpToLine?.("right", line!);
-                              }}
-                              title={`Jump to Right R${line}`}
-                            >
-                              R{line}
-                            </button>
-                          ) : null}
-                          <span className={`sev sev-${sev}`}>{sev}</span>
-                        </div>
-                      </div>
-                      <div className="findingMsg">{String(it?.message ?? it?.details ?? it?.error ?? "")}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ padding: "18px 4px 30px", color: props.THEME.muted, fontSize: 12, textAlign: "center" }}>
-        © {new Date().getFullYear()} ConfigSift • All processing in your browser — nothing uploaded.
-      </div>
+  return (
+    <>
+      {section === "summary" || section === "both" ? <Summary /> : null}
+      {section === "findings" || section === "both" ? <Findings /> : null}
     </>
   );
 }

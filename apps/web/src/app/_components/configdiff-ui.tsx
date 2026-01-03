@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 
 export function ActionButton({
   children,
@@ -43,25 +43,24 @@ export function Pill({ text }: { text: string }) {
   );
 }
 
-export function Badge({
-  label,
-  variant,
-}: {
-  label: string;
-  variant: "changed" | "added" | "removed" | "findings" | "critical" | "suggestions";
-}) {
-  // ✅ Use theme-aware CSS variables you already defined in configdiff.css
-  const dot = (() => {
-    if (variant === "added") return "var(--badge-dot-added)";
-    if (variant === "removed") return "var(--badge-dot-removed)";
-    if (variant === "changed") return "var(--badge-dot-changed)";
-    if (variant === "critical") return "var(--badge-dot-critical)";
-    if (variant === "suggestions") return "var(--badge-dot-suggestions)";
-    return "var(--badge-dot-findings)";
-  })();
+/** ✅ Badge colors should be colorful in BOTH light + dark */
+type BadgeVariant = "changed" | "added" | "removed" | "findings" | "critical" | "suggestions";
 
+const BADGE_COLORS: Record<BadgeVariant, string> = {
+  findings: "#8B5CF6", // violet
+  critical: "#EF4444", // red
+  suggestions: "#F59E0B", // amber
+  changed: "#3B82F6", // blue
+  added: "#10B981", // green
+  removed: "#F97316", // orange
+};
+
+export function Badge({ label, variant }: { label: string; variant: BadgeVariant }) {
+  const c = BADGE_COLORS[variant] ?? "#64748B";
+
+  // We pass a single color token to CSS; CSS can tint bg/border consistently in light/dark.
   return (
-    <span className="badge" style={{ ["--dot" as any]: dot }}>
+    <span className="badge" data-variant={variant} style={{ ["--dot" as any]: c }}>
       <span className="dot" aria-hidden />
       {label}
     </span>
@@ -110,11 +109,21 @@ export function Section({
   title,
   children,
   rightSlot,
+  collapsible = true,
+  defaultOpen = true,
 }: {
   title: string;
   children: React.ReactNode;
   rightSlot?: React.ReactNode;
+  /** If true, header toggles open/closed (default: true) */
+  collapsible?: boolean;
+  /** Initial open state when collapsible (default: true) */
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState<boolean>(defaultOpen);
+
+  const showBody = !collapsible || open;
+
   return (
     <section style={{ marginTop: 18 }}>
       <div className="sectionTitleRow">
@@ -126,13 +135,47 @@ export function Section({
             letterSpacing: "-0.01em",
           }}
         >
-          {title}
+          {collapsible ? (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              title={open ? "Collapse" : "Expand"}
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span aria-hidden style={{ width: 14, display: "inline-block", opacity: 0.9 }}>
+                {open ? "▾" : "▸"}
+              </span>
+              <span>{title}</span>
+            </button>
+          ) : (
+            title
+          )}
         </h2>
-        {rightSlot ?? null}
+
+        {rightSlot ? (
+          // Prevent clicks on the rightSlot (e.g., "Copy keys") from toggling the section
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {rightSlot}
+          </div>
+        ) : null}
       </div>
-      <div className="cd-card" style={{ marginTop: 10 }}>
-        {children}
-      </div>
+
+      {showBody ? (
+        <div className="cd-card" style={{ marginTop: 10 }}>
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

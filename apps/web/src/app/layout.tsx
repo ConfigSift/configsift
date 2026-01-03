@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import "./configdiff.css";
 
@@ -22,9 +23,7 @@ export const metadata: Metadata = {
     description: "Diff, validate, and review config files safely with risk flagging.",
     url: "https://configsift.com",
     siteName: "ConfigSift",
-    images: [
-      { url: "/og.png", width: 1200, height: 630, alt: "ConfigSift" },
-    ],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "ConfigSift" }],
     type: "website",
   },
   twitter: {
@@ -44,6 +43,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {children}
+        <Analytics />
       </body>
     </html>
   );

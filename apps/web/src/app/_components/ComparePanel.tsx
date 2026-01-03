@@ -4,6 +4,7 @@ import React from "react";
 import { ActionButton, Toggle, Badge, Section, Row, RowNode } from "./configdiff-ui";
 import type { EnvProfileId, FormatId } from "../lib/shareState";
 import { normSeverity } from "../lib/configdiff";
+import { trackEvent } from "../lib/analytics";
 
 type SortMode = "key_asc" | "key_desc" | "severity_desc" | "none";
 type Side = "left" | "right";
@@ -158,7 +159,6 @@ export type CompareSummaryBarProps = Pick<
 export function CompareSummaryBar(props: CompareSummaryBarProps) {
   const hasError = "error" in (props.result as any);
 
-  // ✅ Step 1: clearer status + guidance text (integrated)
   const statusPill = props.compareRunning
     ? "Comparing…"
     : !props.draftReady
@@ -172,6 +172,27 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
     : props.hasCompared
     ? "Up to date"
     : `Next step: Click ${props.compareLabel}`;
+
+  const trackCompareClick = () => {
+    trackEvent("compare_click", {
+      format: props.format,
+      ready: !!props.draftReady,
+      hadCompared: !!props.hasCompared,
+    });
+    props.onRunCompare?.();
+  };
+
+  const trackDownload = (kind: "json" | "markdown" | "share_json" | "import_share_json" | "clear_saved") => {
+    trackEvent("compare_export_click", {
+      format: props.format,
+      kind,
+      hasCompared: !!props.hasCompared,
+    });
+  };
+
+  const trackCopyKeys = (scope: string) => {
+    trackEvent("compare_copy_keys", { format: props.format, scope });
+  };
 
   return (
     <>
@@ -188,7 +209,6 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
       )}
 
       <section style={{ marginTop: 18 }}>
-        {/* ✅ Compact header like Validate */}
         <div className="cd-card" style={{ marginTop: 10 }}>
           <div className="cd-cardHeader" style={{ alignItems: "center" }}>
             <div>
@@ -205,10 +225,9 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
                 {statusPill}
               </span>
 
-              {/* ✅ Compare button in top-right */}
               <ActionButton
                 variant="primary"
-                onClick={() => props.onRunCompare?.()}
+                onClick={trackCompareClick}
                 disabled={!props.draftReady || !props.onRunCompare || !!props.compareRunning}
                 title={!props.draftReady ? "Paste/upload both sides first" : "Run comparison"}
               >
@@ -217,9 +236,7 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
             </div>
           </div>
 
-          {/* ✅ Summary body (same controls, tighter spacing) */}
           <div className="cd-controls" style={{ paddingTop: 10 }}>
-            {/* Keep the “next step” messaging, but tighter */}
             {!props.draftReady ? (
               <div className="callout callout-info" style={{ marginBottom: 10 }}>
                 <strong>Next step:</strong> Paste/upload both configs, then click <strong>{props.compareLabel}</strong>.
@@ -240,34 +257,99 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
               <div className="controlLabel">Search</div>
               <input
                 value={props.query}
-                onChange={(e) => props.setQuery(e.target.value)}
+                onChange={(e) => {
+                  props.setQuery(e.target.value);
+                }}
+                onBlur={() => {
+                  if (props.query.trim()) trackEvent("compare_search_used", { format: props.format });
+                }}
                 placeholder="Filter keys/values (e.g., S3, JWT, DATABASE, DEBUG)…"
                 className="cd-input"
               />
-              <ActionButton variant="subtle" onClick={() => props.setQuery("")}>
+              <ActionButton
+                variant="subtle"
+                onClick={() => {
+                  if (props.query.trim()) trackEvent("compare_search_clear", { format: props.format });
+                  props.setQuery("");
+                }}
+              >
                 Clear
               </ActionButton>
             </div>
 
             <div className="controlRow" style={{ alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <div className="controlLabel">Show</div>
-              <Toggle label="Findings" checked={props.showFindings} onChange={props.setShowFindings} />
-              <Toggle label="Changed" checked={props.showChanged} onChange={props.setShowChanged} />
-              <Toggle label="Added" checked={props.showAdded} onChange={props.setShowAdded} />
-              <Toggle label="Removed" checked={props.showRemoved} onChange={props.setShowRemoved} />
-              <ActionButton variant="subtle" onClick={props.applyPresetOnlyChanged} title="Quick preset: show only Changed">
+
+              <Toggle
+                label="Findings"
+                checked={props.showFindings}
+                onChange={(v) => {
+                  trackEvent("compare_filter_toggle", { format: props.format, filter: "findings", on: v });
+                  props.setShowFindings(v);
+                }}
+              />
+              <Toggle
+                label="Changed"
+                checked={props.showChanged}
+                onChange={(v) => {
+                  trackEvent("compare_filter_toggle", { format: props.format, filter: "changed", on: v });
+                  props.setShowChanged(v);
+                }}
+              />
+              <Toggle
+                label="Added"
+                checked={props.showAdded}
+                onChange={(v) => {
+                  trackEvent("compare_filter_toggle", { format: props.format, filter: "added", on: v });
+                  props.setShowAdded(v);
+                }}
+              />
+              <Toggle
+                label="Removed"
+                checked={props.showRemoved}
+                onChange={(v) => {
+                  trackEvent("compare_filter_toggle", { format: props.format, filter: "removed", on: v });
+                  props.setShowRemoved(v);
+                }}
+              />
+
+              <ActionButton
+                variant="subtle"
+                onClick={() => {
+                  trackEvent("compare_preset_only_changed", { format: props.format });
+                  props.applyPresetOnlyChanged();
+                }}
+                title="Quick preset: show only Changed"
+              >
                 Only Changed
               </ActionButton>
 
               <span style={{ width: 10 }} />
 
               <div className="controlLabel">Privacy</div>
-              <Toggle label="Mask values" checked={props.maskValues} onChange={props.setMaskValues} />
-              <Toggle label="Secrets only" checked={props.secretsOnly} onChange={props.setSecretsOnly} />
+              <Toggle
+                label="Mask values"
+                checked={props.maskValues}
+                onChange={(v) => {
+                  trackEvent("compare_privacy_toggle", { format: props.format, privacy: "mask_values", on: v });
+                  props.setMaskValues(v);
+                }}
+              />
+              <Toggle
+                label="Secrets only"
+                checked={props.secretsOnly}
+                onChange={(v) => {
+                  trackEvent("compare_privacy_toggle", { format: props.format, privacy: "secrets_only", on: v });
+                  props.setSecretsOnly(v);
+                }}
+              />
 
               <ActionButton
                 variant={props.showMore ? "primary" : "subtle"}
-                onClick={() => props.setShowMore((v: boolean) => !v)}
+                onClick={() => {
+                  trackEvent("compare_advanced_toggle", { format: props.format, on: !props.showMore });
+                  props.setShowMore((vv: boolean) => !vv);
+                }}
                 title="Advanced controls"
               >
                 {props.showMore ? "More ▴" : "More ▾"}
@@ -282,7 +364,11 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
                     <div className="controlHelp">Mode</div>
                     <select
                       value={props.envProfile}
-                      onChange={(e) => props.setEnvProfile(e.target.value as EnvProfileId)}
+                      onChange={(e) => {
+                        const next = e.target.value as EnvProfileId;
+                        trackEvent("compare_env_profile_change", { format: props.format, envProfile: next });
+                        props.setEnvProfile(next);
+                      }}
                       className="cd-select"
                       title="Choose how .env lines are interpreted"
                     >
@@ -307,9 +393,30 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
 
                 <div className="controlRow">
                   <div className="controlLabel">Severity</div>
-                  <Toggle label="High" checked={props.sevHigh} onChange={props.setSevHigh} />
-                  <Toggle label="Medium" checked={props.sevMed} onChange={props.setSevMed} />
-                  <Toggle label="Low" checked={props.sevLow} onChange={props.setSevLow} />
+                  <Toggle
+                    label="High"
+                    checked={props.sevHigh}
+                    onChange={(v) => {
+                      trackEvent("compare_severity_toggle", { format: props.format, sev: "high", on: v });
+                      props.setSevHigh(v);
+                    }}
+                  />
+                  <Toggle
+                    label="Medium"
+                    checked={props.sevMed}
+                    onChange={(v) => {
+                      trackEvent("compare_severity_toggle", { format: props.format, sev: "medium", on: v });
+                      props.setSevMed(v);
+                    }}
+                  />
+                  <Toggle
+                    label="Low"
+                    checked={props.sevLow}
+                    onChange={(v) => {
+                      trackEvent("compare_severity_toggle", { format: props.format, sev: "low", on: v });
+                      props.setSevLow(v);
+                    }}
+                  />
                   <span className="mutedSm">(applies to Risk Findings)</span>
                 </div>
 
@@ -318,7 +425,11 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
                   <div className="controlHelp">Mode</div>
                   <select
                     value={props.sortMode}
-                    onChange={(e) => props.setSortMode(e.target.value as SortMode)}
+                    onChange={(e) => {
+                      const next = e.target.value as SortMode;
+                      trackEvent("compare_sort_change", { format: props.format, mode: next });
+                      props.setSortMode(next);
+                    }}
                     className="cd-select"
                   >
                     <option value="none">None (input order)</option>
@@ -338,7 +449,11 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
                     value={props.rowLimit}
                     min={0}
                     step={50}
-                    onChange={(e) => props.setRowLimit(parseInt(e.target.value || "0", 10))}
+                    onChange={(e) => {
+                      const next = parseInt(e.target.value || "0", 10);
+                      trackEvent("compare_row_limit_change", { format: props.format, rowLimit: next });
+                      props.setRowLimit(next);
+                    }}
                     className="cd-number"
                   />
                   <span className="mutedSm">(applies after filters; prevents UI freezes on huge diffs)</span>
@@ -350,12 +465,22 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
                       </span>
                       <ActionButton
                         variant="subtle"
-                        onClick={() => props.setRowLimit(0)}
+                        onClick={() => {
+                          trackEvent("compare_row_limit_action", { format: props.format, action: "show_all" });
+                          props.setRowLimit(0);
+                        }}
                         title="Show all rows (may slow UI on huge diffs)"
                       >
                         Show all (may slow)
                       </ActionButton>
-                      <ActionButton variant="subtle" onClick={() => props.setRowLimit(500)} title="Reset row limit to 500">
+                      <ActionButton
+                        variant="subtle"
+                        onClick={() => {
+                          trackEvent("compare_row_limit_action", { format: props.format, action: "reset_500" });
+                          props.setRowLimit(500);
+                        }}
+                        title="Reset row limit to 500"
+                      >
                         Reset
                       </ActionButton>
                     </span>
@@ -376,7 +501,10 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
 
             <div className="exportRow">
               <ActionButton
-                onClick={props.onDownloadJSON}
+                onClick={() => {
+                  trackDownload("json");
+                  props.onDownloadJSON();
+                }}
                 disabled={!props.hasCompared || hasError}
                 title={!props.hasCompared ? "Run Compare first" : undefined}
               >
@@ -384,7 +512,10 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
               </ActionButton>
 
               <ActionButton
-                onClick={props.onDownloadMarkdown}
+                onClick={() => {
+                  trackDownload("markdown");
+                  props.onDownloadMarkdown();
+                }}
                 disabled={!props.hasCompared || hasError}
                 title={!props.hasCompared ? "Run Compare first" : undefined}
               >
@@ -393,27 +524,40 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
 
               <ActionButton
                 variant="subtle"
-                onClick={props.onDownloadShareJSON}
+                onClick={() => {
+                  trackDownload("share_json");
+                  props.onDownloadShareJSON();
+                }}
                 title="Export inputs + UI settings (for sharing large configs)"
               >
                 Share JSON
               </ActionButton>
+
               <ActionButton
                 variant="subtle"
-                onClick={props.onTriggerImportShareJSON}
+                onClick={() => {
+                  trackDownload("import_share_json");
+                  props.onTriggerImportShareJSON();
+                }}
                 title="Import inputs + UI settings from Share JSON"
               >
                 Import Share JSON
               </ActionButton>
 
-              <ActionButton variant="subtle" onClick={props.onClearSavedDraft} title="Clear saved draft from this browser">
+              <ActionButton
+                variant="subtle"
+                onClick={() => {
+                  trackDownload("clear_saved");
+                  props.onClearSavedDraft();
+                }}
+                title="Clear saved draft from this browser"
+              >
                 Clear saved
               </ActionButton>
             </div>
           </div>
         </div>
 
-        {/* ✅ Badges (kept) */}
         <div className="badgeRow">
           <Badge
             label={`Findings: ${props.filteredAll.findingsFiltered.length} / ${props.findingCountsAll.total}`}
@@ -427,7 +571,6 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
             label={`Suggestions: ${props.findingCountsUI.suggestions} / ${props.findingCountsAll.suggestions}`}
             variant="suggestions"
           />
-
           <Badge label={`Changed: ${props.filteredAll.changedFiltered.length}`} variant="changed" />
           <Badge label={`Added: ${props.filteredAll.addedFiltered.length}`} variant="added" />
           <Badge label={`Removed: ${props.filteredAll.removedFiltered.length}`} variant="removed" />
@@ -438,6 +581,14 @@ export function CompareSummaryBar(props: CompareSummaryBarProps) {
 }
 
 export function ComparePanel(props: ComparePanelProps) {
+  const trackCopyKeys = (scope: string, count: number) => {
+    trackEvent("compare_copy_keys", { format: props.format, scope, count });
+  };
+
+  const trackJump = (from: string, side: Side, line: number) => {
+    trackEvent("compare_jump_to_line", { format: props.format, from, side, line });
+  };
+
   const renderFindingCard = (item: FindingItem, forcedSide?: Side) => {
     const { f, sev, leftLine, rightLine } = item;
 
@@ -456,12 +607,14 @@ export function ComparePanel(props: ComparePanelProps) {
         tabIndex={clickable ? 0 : -1}
         onClick={() => {
           if (!clickable) return;
+          trackJump("finding_card", preferredSide!, preferredLine!);
           props.onJumpToLine(preferredSide!, preferredLine!);
         }}
         onKeyDown={(e) => {
           if (!clickable) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
+            trackJump("finding_card_kbd", preferredSide!, preferredLine!);
             props.onJumpToLine(preferredSide!, preferredLine!);
           }
         }}
@@ -477,6 +630,7 @@ export function ComparePanel(props: ComparePanelProps) {
                 title={`Jump to Left L${leftLine}`}
                 onClick={(e) => {
                   e.stopPropagation();
+                  trackJump("finding_pill", "left", leftLine);
                   props.onJumpToLine("left", leftLine);
                 }}
               >
@@ -491,6 +645,7 @@ export function ComparePanel(props: ComparePanelProps) {
                 title={`Jump to Right R${rightLine}`}
                 onClick={(e) => {
                   e.stopPropagation();
+                  trackJump("finding_pill", "right", rightLine);
                   props.onJumpToLine("right", rightLine);
                 }}
               >
@@ -505,6 +660,7 @@ export function ComparePanel(props: ComparePanelProps) {
                 title={`Jump to Left L${leftLine}`}
                 onClick={(e) => {
                   e.stopPropagation();
+                  trackJump("finding_pill", "left", leftLine);
                   props.onJumpToLine("left", leftLine);
                 }}
               >
@@ -519,6 +675,7 @@ export function ComparePanel(props: ComparePanelProps) {
                 title={`Jump to Right R${rightLine}`}
                 onClick={(e) => {
                   e.stopPropagation();
+                  trackJump("finding_pill", "right", rightLine);
                   props.onJumpToLine("right", rightLine);
                 }}
               >
@@ -561,11 +718,12 @@ export function ComparePanel(props: ComparePanelProps) {
   const rightFindings = findings.filter((x) => x.side === "right" || x.side === "both");
   const unmappedFindings = findings.filter((x) => x.side === "unmapped");
 
+  const hasError = "error" in (props.result as any);
+
   return (
     <>
-      {props.hasCompared && !("error" in (props.result as any)) ? (
+      {props.hasCompared && !hasError ? (
         <>
-          {/* ✅ REORDERED: Findings first */}
           {props.showFindings && (
             <Section
               title={`Risk Findings — ${props.showingText(
@@ -573,7 +731,13 @@ export function ComparePanel(props: ComparePanelProps) {
                 props.filteredAll.findingsFiltered.length
               )}`}
               rightSlot={
-                <ActionButton onClick={() => props.copyKeys(props.filteredAll.findingsFiltered.map((x: any) => x.key))}>
+                <ActionButton
+                  onClick={() => {
+                    const keys = props.filteredAll.findingsFiltered.map((x: any) => x.key);
+                    trackCopyKeys("findings_all", keys.length);
+                    props.copyKeys(keys);
+                  }}
+                >
                   Copy keys
                 </ActionButton>
               }
@@ -592,7 +756,14 @@ export function ComparePanel(props: ComparePanelProps) {
                           <div className="cd-cardHint">{leftFindings.length} finding(s)</div>
                         </div>
                         <div className="cd-actions">
-                          <ActionButton onClick={() => props.copyKeys(leftFindings.map((x) => x.f.key))} title="Copy keys from Left findings">
+                          <ActionButton
+                            onClick={() => {
+                              const keys = leftFindings.map((x) => x.f.key);
+                              trackCopyKeys("findings_left", keys.length);
+                              props.copyKeys(keys);
+                            }}
+                            title="Copy keys from Left findings"
+                          >
                             Copy keys
                           </ActionButton>
                         </div>
@@ -616,7 +787,14 @@ export function ComparePanel(props: ComparePanelProps) {
                           <div className="cd-cardHint">{rightFindings.length} finding(s)</div>
                         </div>
                         <div className="cd-actions">
-                          <ActionButton onClick={() => props.copyKeys(rightFindings.map((x) => x.f.key))} title="Copy keys from Right findings">
+                          <ActionButton
+                            onClick={() => {
+                              const keys = rightFindings.map((x) => x.f.key);
+                              trackCopyKeys("findings_right", keys.length);
+                              props.copyKeys(keys);
+                            }}
+                            title="Copy keys from Right findings"
+                          >
                             Copy keys
                           </ActionButton>
                         </div>
@@ -639,10 +817,19 @@ export function ComparePanel(props: ComparePanelProps) {
                       <div className="cd-cardHeader">
                         <div>
                           <div className="cd-cardTitle">Unmapped</div>
-                          <div className="cd-cardHint">{unmappedFindings.length} finding(s) couldn’t be mapped to a specific side/line.</div>
+                          <div className="cd-cardHint">
+                            {unmappedFindings.length} finding(s) couldn’t be mapped to a specific side/line.
+                          </div>
                         </div>
                         <div className="cd-actions">
-                          <ActionButton onClick={() => props.copyKeys(unmappedFindings.map((x) => x.f.key))} title="Copy keys from Unmapped findings">
+                          <ActionButton
+                            onClick={() => {
+                              const keys = unmappedFindings.map((x) => x.f.key);
+                              trackCopyKeys("findings_unmapped", keys.length);
+                              props.copyKeys(keys);
+                            }}
+                            title="Copy keys from Unmapped findings"
+                          >
                             Copy keys
                           </ActionButton>
                         </div>
@@ -661,7 +848,17 @@ export function ComparePanel(props: ComparePanelProps) {
           {props.showChanged && (
             <Section
               title={`Changed — ${props.showingText(props.rendered.changedFiltered.length, props.filteredAll.changedFiltered.length)}`}
-              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.changedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
+              rightSlot={
+                <ActionButton
+                  onClick={() => {
+                    const keys = props.filteredAll.changedFiltered.map((x: any) => x.key);
+                    trackCopyKeys("changed", keys.length);
+                    props.copyKeys(keys);
+                  }}
+                >
+                  Copy keys
+                </ActionButton>
+              }
             >
               <div className="rows">
                 {props.rendered.changedFiltered.map((c: any) => (
@@ -674,7 +871,17 @@ export function ComparePanel(props: ComparePanelProps) {
           {props.showAdded && (
             <Section
               title={`Added — ${props.showingText(props.rendered.addedFiltered.length, props.filteredAll.addedFiltered.length)}`}
-              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.addedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
+              rightSlot={
+                <ActionButton
+                  onClick={() => {
+                    const keys = props.filteredAll.addedFiltered.map((x: any) => x.key);
+                    trackCopyKeys("added", keys.length);
+                    props.copyKeys(keys);
+                  }}
+                >
+                  Copy keys
+                </ActionButton>
+              }
             >
               <div className="rows">
                 {props.rendered.addedFiltered.map((a: any) => (
@@ -687,7 +894,17 @@ export function ComparePanel(props: ComparePanelProps) {
           {props.showRemoved && (
             <Section
               title={`Removed — ${props.showingText(props.rendered.removedFiltered.length, props.filteredAll.removedFiltered.length)}`}
-              rightSlot={<ActionButton onClick={() => props.copyKeys(props.filteredAll.removedFiltered.map((x: any) => x.key))}>Copy keys</ActionButton>}
+              rightSlot={
+                <ActionButton
+                  onClick={() => {
+                    const keys = props.filteredAll.removedFiltered.map((x: any) => x.key);
+                    trackCopyKeys("removed", keys.length);
+                    props.copyKeys(keys);
+                  }}
+                >
+                  Copy keys
+                </ActionButton>
+              }
             >
               <div className="rows">
                 {props.rendered.removedFiltered.map((r: any) => (
